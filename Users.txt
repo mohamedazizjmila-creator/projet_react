@@ -1,0 +1,4 @@
+👑 Admin	admin@avibiotech.com	admin123456
+🏭 Responsable	responsable@avibiotech.com	responsable123
+🔧 Technicien	technicien@avibiotech.com	technicien123
+🩺 Vétérinaire	veterinaire@avibiotech.com	veterinaire123
