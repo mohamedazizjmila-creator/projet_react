@@ -19,23 +19,25 @@ const EGG_YELLOW  = '#fef3c7';
 const CHICKEN_BROWN = '#d4a574';
 
 // ── Logo SOTAVI Component (identique à la sidebar) ────────────────────────────
-function SotaviLogo({ size = 80 }) {
+function SotaviLogo({ size = 90 }) {
   const logoSrc = "/assets/Logo.png";
   
   return (
     <Box sx={{
       width: size,
       height: size,
-      borderRadius: '20px',
-      background: `linear-gradient(135deg, ${GREEN_DARK}, ${GREEN_MID})`,
+      borderRadius: '50%',
+      background: 'rgba(255, 255, 255, 0.05)',
+      backdropFilter: 'blur(12px)',
+      border: '1px solid rgba(255, 255, 255, 0.15)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      boxShadow: '0 8px 25px rgba(10,61,42,0.3)',
+      boxShadow: '0 8px 32px rgba(10,61,42,0.2)',
       margin: '0 auto',
-      mb: 2,
+      mb: 3,
       overflow: 'hidden',
-      position: 'relative',
+      p: 1.5
     }}>
       <img 
         src={logoSrc}
@@ -43,10 +45,8 @@ function SotaviLogo({ size = 80 }) {
         style={{
           width: '100%',
           height: '100%',
-          objectFit: 'cover',
-          position: 'absolute',
-          top: 0,
-          left: 0,
+          objectFit: 'contain',
+          filter: 'drop-shadow(0 0 8px rgba(0,0,0,0.2))'
         }}
       />
     </Box>
