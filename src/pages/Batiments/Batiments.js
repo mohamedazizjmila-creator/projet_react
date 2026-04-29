@@ -3,15 +3,17 @@ import {
   Box, Typography, Button, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, IconButton, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField,
-  MenuItem, Grid, Chip, Tooltip, InputAdornment, Avatar
+  MenuItem, Grid, Chip, Tooltip, InputAdornment, Avatar, useTheme
 } from '@mui/material';
 import {
-  Add, Edit, Delete, Home, Search, FilterList, 
+  Add, Edit, Delete, Search, FilterList, 
   Thermostat, Science
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSnackbar } from 'notistack';
+import { useTranslation } from 'react-i18next';
 import { getBatiments, addBatiment, updateBatiment, deleteBatiment } from '../../services/firestore';
+import { useSettings } from '../../contexts/SettingsContext';
 
 // ── Chicken Icon Component ──
 function ChickenSmall({ size = 20, color = '#a3e635' }) {
@@ -28,6 +30,9 @@ function ChickenSmall({ size = 20, color = '#a3e635' }) {
 }
 
 export default function Batiments() {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const { settings } = useSettings();
   const { enqueueSnackbar } = useSnackbar();
   const [batiments, setBatiments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +55,7 @@ export default function Batiments() {
       const data = await getBatiments();
       setBatiments(data);
     } catch (error) {
-      enqueueSnackbar('Erreur lors du chargement', { variant: 'error' });
+      enqueueSnackbar(t('Error loading'), { variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -74,26 +79,26 @@ export default function Batiments() {
     try {
       if (editingBatiment) {
         await updateBatiment(editingBatiment.id, formData);
-        enqueueSnackbar('Bâtiment mis à jour', { variant: 'success' });
+        enqueueSnackbar(t('Building updated'), { variant: 'success' });
       } else {
         await addBatiment(formData);
-        enqueueSnackbar('Bâtiment ajouté', { variant: 'success' });
+        enqueueSnackbar(t('Building added'), { variant: 'success' });
       }
       handleClose();
       loadBatiments();
     } catch (error) {
-      enqueueSnackbar('Erreur lors de l\'enregistrement', { variant: 'error' });
+      enqueueSnackbar(t('Error saving'), { variant: 'error' });
     }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Supprimer ce bâtiment ?')) {
+    if (window.confirm(t('Delete confirmation'))) {
       try {
         await deleteBatiment(id);
-        enqueueSnackbar('Bâtiment supprimé', { variant: 'success' });
+        enqueueSnackbar(t('Building deleted'), { variant: 'success' });
         loadBatiments();
       } catch (error) {
-        enqueueSnackbar('Erreur lors de la suppression', { variant: 'error' });
+        enqueueSnackbar(t('Error deleting'), { variant: 'error' });
       }
     }
   };
@@ -105,13 +110,13 @@ export default function Batiments() {
   return (
     <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
       {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#fff', fontWeight: 800 }}>
-            Gestion des Bâtiments
+          <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('Building Management')}
           </Typography>
-          <Typography sx={{ color: '#64748b', mt: 0.5 }}>
-            Configurez et surveillez vos infrastructures d'élevage
+          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {t('Configure Infrastructure')}
           </Typography>
         </Box>
         <Button
@@ -120,7 +125,7 @@ export default function Batiments() {
           onClick={() => handleOpen()}
           sx={{ px: 3, py: 1.2, borderRadius: '12px' }}
         >
-          Nouveau Bâtiment
+          {t('New Building')}
         </Button>
       </Box>
 
@@ -128,20 +133,20 @@ export default function Batiments() {
       <Paper className="glass-card" sx={{ p: 2, mb: 3, borderRadius: '16px', display: 'flex', gap: 2, alignItems: 'center' }}>
         <TextField
           size="small"
-          placeholder="Rechercher un bâtiment..."
+          placeholder={t('Search Building')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           sx={{ flexGrow: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <Search sx={{ color: '#64748b' }} />
+                <Search sx={{ color: 'text.secondary' }} />
               </InputAdornment>
             ),
           }}
         />
         <IconButton sx={{ bgcolor: 'rgba(148, 163, 184, 0.05)', borderRadius: '10px' }}>
-          <FilterList sx={{ color: '#94a3b8' }} />
+          <FilterList sx={{ color: 'text.secondary' }} />
         </IconButton>
       </Paper>
 
@@ -150,12 +155,12 @@ export default function Batiments() {
         <Table stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell>NOM DU BÂTIMENT</TableCell>
-              <TableCell>TYPE</TableCell>
-              <TableCell>CAPACITÉ</TableCell>
-              <TableCell>STATUT</TableCell>
-              <TableCell>CAPTEURS</TableCell>
-              <TableCell align="right">ACTIONS</TableCell>
+              <TableCell>{t('Building Name')}</TableCell>
+              <TableCell>{t('TYPE')}</TableCell>
+              <TableCell>{t('CAPACITY')}</TableCell>
+              <TableCell>{t('STATUS')}</TableCell>
+              <TableCell>{t('SENSORS')}</TableCell>
+              <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>{t('ACTIONS')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -174,24 +179,24 @@ export default function Batiments() {
                       <Avatar sx={{ bgcolor: 'rgba(163, 230, 53, 0.1)', color: '#a3e635' }}>
                         <ChickenSmall size={22} />
                       </Avatar>
-                      <Typography sx={{ fontWeight: 700, color: '#f8fafc' }}>{batiment.nom}</Typography>
+                      <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{batiment.nom}</Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
                     <Chip 
-                      label={batiment.type?.toUpperCase() || 'N/A'} 
+                      label={batiment.type === 'poulet de chair' ? t('Chicken') : batiment.type === 'poules pondeuses' ? t('Layers') : t('Turkey')} 
                       size="small" 
                       sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 700, fontSize: '0.65rem' }} 
                     />
                   </TableCell>
-                  <TableCell sx={{ color: '#94a3b8', fontWeight: 600 }}>
-                    {batiment.capacite} places
+                  <TableCell sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                    {batiment.capacite} {t('places')}
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <div className={`dot-glow ${batiment.statut === 'actif' ? 'dot-success' : 'dot-warning'}`} />
                       <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: batiment.statut === 'actif' ? '#a3e635' : '#fbbf24' }}>
-                        {batiment.statut?.toUpperCase() || 'ACTIF'}
+                        {batiment.statut === 'actif' ? t('Active') : batiment.statut === 'inactif' ? t('Inactive') : t('Maintenance')}
                       </Typography>
                     </Box>
                   </TableCell>
@@ -205,13 +210,13 @@ export default function Batiments() {
                       </Tooltip>
                     </Box>
                   </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Modifier">
+                  <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>
+                    <Tooltip title={t('Edit')}>
                       <IconButton onClick={() => handleOpen(batiment)} sx={{ color: '#3b82f6' }}>
                         <Edit fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Supprimer">
+                    <Tooltip title={t('Delete')}>
                       <IconButton onClick={() => handleDelete(batiment.id)} sx={{ color: '#f87171' }}>
                         <Delete fontSize="small" />
                       </IconButton>
@@ -223,7 +228,7 @@ export default function Batiments() {
             {filteredBatiments.length === 0 && !loading && (
               <TableRow>
                 <TableCell colSpan={6} sx={{ textAlign: 'center', py: 8 }}>
-                  <Typography sx={{ color: '#64748b' }}>Aucun bâtiment trouvé</Typography>
+                  <Typography sx={{ color: 'text.secondary' }}>{t('No building found')}</Typography>
                 </TableCell>
               </TableRow>
             )}
@@ -240,8 +245,8 @@ export default function Batiments() {
           sx: { borderRadius: '24px', width: '100%', maxWidth: 500, p: 2 }
         }}
       >
-        <DialogTitle sx={{ fontWeight: 800, color: '#fff' }}>
-          {editingBatiment ? 'Modifier le bâtiment' : 'Nouveau bâtiment'}
+        <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
+          {editingBatiment ? t('Edit Building') : t('New Building')}
         </DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
@@ -249,7 +254,7 @@ export default function Batiments() {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Nom du bâtiment"
+                  label={t('Building Name')}
                   required
                   value={formData.nom}
                   onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
@@ -259,20 +264,20 @@ export default function Batiments() {
                 <TextField
                   fullWidth
                   select
-                  label="Type d'élevage"
+                  label={t('TYPE')}
                   value={formData.type}
                   onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                 >
-                  <MenuItem value="poulet de chair">Poulet de chair</MenuItem>
-                  <MenuItem value="poules pondeuses">Poules pondeuses</MenuItem>
-                  <MenuItem value="dinde">Dinde</MenuItem>
+                  <MenuItem value="poulet de chair">{t('Chicken')}</MenuItem>
+                  <MenuItem value="poules pondeuses">{t('Layers')}</MenuItem>
+                  <MenuItem value="dinde">{t('Turkey')}</MenuItem>
                 </TextField>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   type="number"
-                  label="Capacité"
+                  label={t('CAPACITY')}
                   required
                   value={formData.capacite}
                   onChange={(e) => setFormData({ ...formData, capacite: e.target.value })}
@@ -282,25 +287,25 @@ export default function Batiments() {
                 <TextField
                   fullWidth
                   select
-                  label="Statut"
+                  label={t('STATUS')}
                   value={formData.statut}
                   onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
                 >
-                  <MenuItem value="actif">Actif</MenuItem>
-                  <MenuItem value="inactif">Inactif</MenuItem>
-                  <MenuItem value="maintenance">Maintenance</MenuItem>
+                  <MenuItem value="actif">{t('Active')}</MenuItem>
+                  <MenuItem value="inactif">{t('Inactive')}</MenuItem>
+                  <MenuItem value="maintenance">{t('Maintenance')}</MenuItem>
                 </TextField>
               </Grid>
             </Grid>
           </DialogContent>
           <DialogActions sx={{ p: 3 }}>
-            <Button onClick={handleClose} sx={{ color: '#94a3b8' }}>Annuler</Button>
+            <Button onClick={handleClose} sx={{ color: 'text.secondary' }}>{t('Cancel')}</Button>
             <Button type="submit" variant="contained">
-              Enregistrer
+              {t('Save')}
             </Button>
           </DialogActions>
         </form>
       </Dialog>
     </Box>
   );
-}
+}

@@ -1,34 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, IconButton, Dialog, DialogTitle, DialogContent,
-  TextField, DialogActions, Alert, Chip, Typography, Tooltip
+  TextField, DialogActions, Alert, Chip, Typography, Tooltip, useTheme, Grid
 } from '@mui/material';
-import { Add, Edit, Delete, AddCircle, RemoveCircle, Warning, Inventory } from '@mui/icons-material';
+import { Add, Edit, Delete, AddCircle, RemoveCircle, Inventory, Refresh } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSettings } from '../../contexts/SettingsContext';
 import { getStocks, addStock, updateStock, deleteStock } from '../../services/firestore';
 
-// ── palette ───────────────────────────────────────────────────────────────────
-const GREEN_DARK  = '#14532d';
-const GREEN_MID   = '#166534';
-const GREEN_MAIN  = '#16a34a';
-const GREEN_GHOST = '#f0fdf4';
-const GREEN_SOFT  = '#dcfce7';
-
 // ── Small chicken for decoration ─────────────────────────────────────────────
-function ChickenSmall({ size = 20, color = '#86efac' }) {
+function ChickenSmall({ size = 20, color = '#a3e635' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
       <ellipse cx="32" cy="40" rx="18" ry="14" fill={color} opacity="0.9"/>
       <circle cx="44" cy="22" r="10" fill={color} opacity="0.9"/>
       <path d="M41 13 Q43 8 45 13 Q47 7 49 13" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" fill="none"/>
       <path d="M53 23 L58 21 L53 25 Z" fill="#f59e0b"/>
-      <circle cx="47" cy="21" r="2" fill={GREEN_DARK}/>
+      <circle cx="47" cy="21" r="2" fill="#0f172a"/>
       <ellipse cx="52" cy="26" rx="2.5" ry="3.5" fill="#ef4444" opacity="0.9"/>
     </svg>
   );
 }
 
+// ── Stat card component ──────────────────────────────────────────────────────
+function StatCard({ value, label, icon, active }) {
+  const theme = useTheme();
+  return (
+    <Box sx={{
+      flex: 1, minWidth: 160,
+      p: 2.5, borderRadius: '20px',
+      background: active
+        ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`
+        : theme.palette.background.paper,
+      border: `1px solid ${theme.palette.divider}`,
+      boxShadow: active ? `0 8px 24px ${theme.palette.primary.main}20` : 'none',
+    }}>
+      <Typography sx={{ fontSize: '1.2rem', mb: 0.5 }}>{icon}</Typography>
+      <Typography sx={{
+        fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.1,
+        color: active ? '#fff' : 'text.primary',
+      }}>
+        {value}
+      </Typography>
+      <Typography sx={{
+        fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em',
+        textTransform: 'uppercase',
+        color: active ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+        mt: 0.5,
+      }}>
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
 export default function Stocks() {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const { settings } = useSettings();
   const [stocks, setStocks] = useState([]);
   const [open, setOpen] = useState(false);
   const [openMouvement, setOpenMouvement] = useState(false);
@@ -46,25 +77,25 @@ export default function Stocks() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  useEffect(() => {
-    loadStocks();
-  }, []);
-
-  const loadStocks = async () => {
+  const loadStocks = useCallback(async () => {
     try {
       const data = await getStocks();
       setStocks(data);
     } catch (err) {
       console.error("Erreur chargement stocks:", err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadStocks();
+  }, [loadStocks]);
 
   const handleSave = async () => {
     setError('');
     setSuccess('');
     
     if (!formData.nom || !formData.quantite) {
-      setError('Nom et quantité sont requis');
+      setError(t('Name and quantity required'));
       return;
     }
 
@@ -76,7 +107,7 @@ export default function Stocks() {
           seuilAlerte: parseFloat(formData.seuilAlerte) || 0,
           unite: formData.unite
         });
-        setSuccess('Stock modifié');
+        setSuccess(t('Product updated'));
       } else {
         await addStock({
           nom: formData.nom,
@@ -84,7 +115,7 @@ export default function Stocks() {
           seuilAlerte: parseFloat(formData.seuilAlerte) || 0,
           unite: formData.unite
         });
-        setSuccess('Stock ajouté');
+        setSuccess(t('Product added'));
       }
       
       setOpen(false);
@@ -98,10 +129,10 @@ export default function Stocks() {
   };
 
   const handleDelete = async (stock) => {
-    if (window.confirm(`Supprimer ${stock.nom} ?`)) {
+    if (window.confirm(t('Delete product confirmation', { name: stock.nom }))) {
       try {
         await deleteStock(stock.id);
-        setSuccess('Stock supprimé');
+        setSuccess(t('Product deleted'));
         loadStocks();
         setTimeout(() => setSuccess(''), 3000);
       } catch (err) {
@@ -115,7 +146,7 @@ export default function Stocks() {
     
     const quantite = parseFloat(mouvementQuantite);
     if (isNaN(quantite) || quantite <= 0) {
-      setError('Quantité invalide');
+      setError(t('Invalid quantity'));
       return;
     }
 
@@ -124,7 +155,7 @@ export default function Stocks() {
       nouvelleQuantite = selectedStock.quantite + quantite;
     } else {
       if (selectedStock.quantite < quantite) {
-        setError(`Stock insuffisant ! Il reste ${selectedStock.quantite} ${selectedStock.unite}`);
+        setError(t('Insufficient stock', { count: selectedStock.quantite, unit: selectedStock.unite }));
         return;
       }
       nouvelleQuantite = selectedStock.quantite - quantite;
@@ -136,7 +167,11 @@ export default function Stocks() {
         quantite: nouvelleQuantite
       });
       
-      setSuccess(`${mouvementType === 'entree' ? '➕ Ajout' : '➖ Retrait'} de ${quantite} ${selectedStock.unite} effectué`);
+      setSuccess(t('Mouvement success', { 
+        type: mouvementType === 'entree' ? t('In') : t('Out'),
+        count: quantite,
+        unit: selectedStock.unite
+      }));
       setOpenMouvement(false);
       setMouvementQuantite('');
       setMouvementRaison('');
@@ -159,122 +194,91 @@ export default function Stocks() {
     setOpenMouvement(true);
   };
 
-  // Calcul des statistiques
   const totalProduits = stocks.length;
   const produitsFaibles = stocks.filter(s => isLowStock(s.quantite, s.seuilAlerte)).length;
   const valeurStockTotal = stocks.reduce((sum, s) => sum + (Number(s.quantite) || 0), 0);
 
   return (
-    <Box sx={{ maxWidth: 1100 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
-          <Typography sx={{ fontSize: '1.9rem', fontWeight: 800, color: GREEN_DARK, letterSpacing: '-0.3px' }}>
-            Gestion des Stocks
+          <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('Stock Management')}
           </Typography>
-          <Typography sx={{ fontSize: '0.88rem', color: '#6b7280', mt: 0.3 }}>
-            Gérez vos produits d'élevage et suivez les niveaux de stock
+          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {t('Stock Subtitle')}
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => setOpen(true)}
-          sx={{
-            background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-            borderRadius: '10px',
-            textTransform: 'none',
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            px: 2.5, py: 1,
-            boxShadow: '0 4px 14px rgba(20,83,45,0.3)',
-            '&:hover': {
-              background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-              boxShadow: '0 6px 18px rgba(20,83,45,0.4)',
-            },
-          }}
-        >
-          Nouveau produit
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Tooltip title={t('Refresh')}>
+            <IconButton
+              onClick={loadStocks}
+              sx={{
+                background: 'rgba(163, 230, 53, 0.1)',
+                borderRadius: '12px',
+                color: theme.palette.primary.main,
+                '&:hover': { background: 'rgba(163, 230, 53, 0.2)' },
+              }}
+            >
+              <Refresh />
+            </IconButton>
+          </Tooltip>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => setOpen(true)}
+            sx={{ px: 3, py: 1.2, borderRadius: '12px' }}
+          >
+            {t('New Product')}
+          </Button>
+        </Box>
       </Box>
 
       {success && (
-        <Alert severity="success" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>
           {success}
         </Alert>
       )}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>
           {error}
         </Alert>
       )}
 
       {/* ── Summary cards ── */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-        {[
-          { label: 'Total produits', value: totalProduits, icon: '📦' },
-          { label: 'Produits en alerte', value: produitsFaibles, icon: '⚠️' },
-          { label: 'Quantité totale', value: valeurStockTotal.toLocaleString('fr-FR'), icon: '📊' },
-        ].map((c, i) => (
-          <Box key={i} sx={{
-            flex: 1, minWidth: 160,
-            p: 2, borderRadius: '14px',
-            background: i === 0
-              ? `linear-gradient(135deg, ${GREEN_DARK} 0%, ${GREEN_MID} 100%)`
-              : '#fff',
-            border: i === 0 ? 'none' : '1px solid #e5e7eb',
-            boxShadow: i === 0
-              ? '0 4px 18px rgba(20,83,45,0.25)'
-              : '0 1px 4px rgba(0,0,0,0.06)',
-          }}>
-            <Typography sx={{ fontSize: '1.1rem', mb: 0.5 }}>{c.icon}</Typography>
-            <Typography sx={{
-              fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.1,
-              color: i === 0 ? '#fff' : GREEN_DARK,
-            }}>
-              {c.value}
-            </Typography>
-            <Typography sx={{
-              fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              color: i === 0 ? '#86efac' : '#9ca3af',
-              mt: 0.3,
-            }}>
-              {c.label}
-            </Typography>
-          </Box>
-        ))}
-      </Box>
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={4}>
+          <StatCard value={totalProduits} label={t('Total products')} icon="📦" active={true} />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <StatCard value={produitsFaibles} label={t('Alert products')} icon="⚠️" active={false} />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <StatCard value={valeurStockTotal.toLocaleString()} label={t('Total quantity')} icon="📊" active={false} />
+        </Grid>
+      </Grid>
 
       {/* ── Table ── */}
-      <Paper sx={{
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
-        overflow: 'hidden',
-      }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ background: GREEN_GHOST }}>
-                {['Produit', 'Quantité', 'Unité', 'Seuil alerte', 'Statut', 'Actions'].map((h) => (
-                  <TableCell key={h} sx={{
-                    fontWeight: 700, fontSize: '0.72rem',
-                    letterSpacing: '0.08em', textTransform: 'uppercase',
-                    color: GREEN_DARK,
-                    borderBottom: `2px solid ${GREEN_SOFT}`,
-                    py: 1.5,
-                  }}>
-                    {h}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
+      <TableContainer component={Paper} className="glass-card" sx={{ borderRadius: '24px', overflow: 'hidden' }}>
+        <Table stickyHeader>
+          <TableHead>
+            <TableRow>
+              <TableCell>{t('Product')}</TableCell>
+              <TableCell>{t('Quantity')}</TableCell>
+              <TableCell>{t('Unit')}</TableCell>
+              <TableCell>{t('Alert threshold')}</TableCell>
+              <TableCell>{t('Status')}</TableCell>
+              <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>{t('ACTIONS')}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <AnimatePresence>
               {stocks.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 6, color: '#9ca3af', fontSize: '0.88rem' }}>
-                    📦 Aucun produit dans le stock. Ajoutez votre premier produit.
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 8 }}>
+                    <Inventory sx={{ fontSize: 48, mb: 2, color: 'text.secondary', opacity: 0.5 }} />
+                    <Typography sx={{ color: 'text.secondary' }}>{t('No product in stock')}</Typography>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -283,108 +287,61 @@ export default function Stocks() {
                   return (
                     <TableRow
                       key={stock.id}
-                      sx={{
-                        '&:hover': { background: GREEN_GHOST },
-                        background: lowStock 
-                          ? '#fffbeb' 
-                          : idx % 2 === 0 ? '#fff' : '#fafafa',
-                        transition: 'background 0.15s',
+                      component={motion.tr}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      sx={{ 
+                        '&:hover': { bgcolor: 'rgba(163, 230, 53, 0.04)' },
+                        bgcolor: lowStock ? 'rgba(239, 68, 68, 0.03)' : 'transparent'
                       }}
                     >
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box sx={{
-                            width: 32, height: 32, borderRadius: '8px',
-                            background: GREEN_SOFT,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            flexShrink: 0,
-                          }}>
-                            <ChickenSmall size={18} color={GREEN_MAIN} />
-                          </Box>
-                          <Typography sx={{ fontWeight: 600, fontSize: '0.88rem', color: GREEN_DARK }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <ChickenSmall size={24} color={theme.palette.primary.main} />
+                          <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
                             {stock.nom}
                           </Typography>
                         </Box>
                       </TableCell>
                       <TableCell>
-                        <Typography sx={{ 
-                          fontWeight: 700, 
-                          fontSize: '0.88rem', 
-                          color: lowStock ? '#ef4444' : '#374151' 
-                        }}>
-                          {stock.quantite.toLocaleString('fr-FR')}
+                        <Typography sx={{ fontWeight: 800, color: lowStock ? theme.palette.error.main : 'text.primary' }}>
+                          {stock.quantite.toLocaleString()}
                         </Typography>
                       </TableCell>
+                      <TableCell>{stock.unite || '-'}</TableCell>
+                      <TableCell>{stock.seuilAlerte || 0} {stock.unite}</TableCell>
                       <TableCell>
-                        <Typography sx={{ fontSize: '0.88rem', color: '#6b7280' }}>
-                          {stock.unite || '-'}
-                        </Typography>
+                        <Chip 
+                          label={lowStock ? t('Low Stock') : t('OK')} 
+                          color={lowStock ? 'error' : 'success'}
+                          size="small"
+                          sx={{ fontWeight: 800, fontSize: '0.65rem' }}
+                        />
                       </TableCell>
-                      <TableCell>
-                        <Typography sx={{ fontSize: '0.88rem', color: '#6b7280' }}>
-                          {stock.seuilAlerte || 0} {stock.unite}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        {lowStock ? (
-                          <Chip 
-                            icon={<Warning sx={{ fontSize: '0.9rem' }} />} 
-                            label="Stock faible" 
-                            size="small"
-                            sx={{
-                              background: '#fef3c7',
-                              color: '#92400e',
-                              fontWeight: 700,
-                              fontSize: '0.7rem',
-                              height: 24,
-                              '& .MuiChip-icon': { color: '#f59e0b' }
-                            }}
-                          />
-                        ) : (
-                          <Chip 
-                            label="OK" 
-                            size="small"
-                            sx={{
-                              background: GREEN_SOFT,
-                              color: GREEN_DARK,
-                              fontWeight: 700,
-                              fontSize: '0.7rem',
-                              height: 24,
-                            }}
-                          />
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          <Tooltip title="Ajouter au stock">
+                      <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>
+                        <Box sx={{ display: 'flex', gap: 0.5, justifyContent: settings.language === 'ar' ? 'flex-start' : 'flex-end' }}>
+                          <Tooltip title={t('Add to stock')}>
                             <IconButton
                               size="small"
                               onClick={() => openMouvementDialog(stock, 'entree')}
-                              sx={{
-                                borderRadius: '8px',
-                                color: '#16a34a',
-                                '&:hover': { background: GREEN_SOFT },
-                              }}
+                              sx={{ color: theme.palette.success.main }}
                             >
                               <AddCircle fontSize="small" />
                             </IconButton>
                           </Tooltip>
                           
-                          <Tooltip title="Retirer du stock">
+                          <Tooltip title={t('Remove from stock')}>
                             <IconButton
                               size="small"
                               onClick={() => openMouvementDialog(stock, 'sortie')}
-                              sx={{
-                                borderRadius: '8px',
-                                color: '#ef4444',
-                                '&:hover': { background: '#fef2f2' },
-                              }}
+                              sx={{ color: theme.palette.error.main }}
                             >
                               <RemoveCircle fontSize="small" />
                             </IconButton>
                           </Tooltip>
                           
-                          <Tooltip title="Modifier">
+                          <Tooltip title={t('Edit')}>
                             <IconButton
                               size="small"
                               onClick={() => { 
@@ -397,25 +354,17 @@ export default function Stocks() {
                                 }); 
                                 setOpen(true);
                               }}
-                              sx={{
-                                borderRadius: '8px',
-                                color: GREEN_MAIN,
-                                '&:hover': { background: GREEN_SOFT },
-                              }}
+                              sx={{ color: theme.palette.primary.main }}
                             >
                               <Edit fontSize="small" />
                             </IconButton>
                           </Tooltip>
                           
-                          <Tooltip title="Supprimer">
+                          <Tooltip title={t('Delete')}>
                             <IconButton
                               size="small"
                               onClick={() => handleDelete(stock)}
-                              sx={{
-                                borderRadius: '8px',
-                                color: '#ef4444',
-                                '&:hover': { background: '#fef2f2' },
-                              }}
+                              sx={{ color: theme.palette.error.main }}
                             >
                               <Delete fontSize="small" />
                             </IconButton>
@@ -426,244 +375,131 @@ export default function Stocks() {
                   );
                 })
               )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+            </AnimatePresence>
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      {/* ── Dialogue d'ajout/modification produit ── */}
+      {/* ── Dialogue d'ajout/modification ── */}
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
         maxWidth="sm"
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }
+          className: 'glass-card',
+          sx: { borderRadius: '24px', p: 1 }
         }}
       >
-        <DialogTitle sx={{
-          fontWeight: 800, fontSize: '1.1rem',
-          color: GREEN_DARK, pb: 0,
-          borderBottom: `1px solid ${GREEN_SOFT}`,
-          mb: 1,
-        }}>
-          {editing ? '✏️ Modifier le produit' : '📦 Nouveau produit'}
+        <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
+          {editing ? t('Edit Product') : t('New Product')}
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 2 }}>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2, borderRadius: '10px', fontSize: '0.84rem' }}>
-              {error}
-            </Alert>
-          )}
-          
+        <DialogContent>
           <TextField
             fullWidth 
-            label="Nom du produit" 
+            label={t('Product Name')} 
             margin="normal"
             value={formData.nom} 
             onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
             required
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           />
-          
           <TextField
             fullWidth 
-            label="Quantité" 
+            label={t('Quantity')} 
             type="number" 
             margin="normal"
             value={formData.quantite} 
             onChange={(e) => setFormData({ ...formData, quantite: e.target.value })}
             required
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           />
-          
           <TextField
             fullWidth 
-            label="Unité" 
+            label={t('Unit')} 
             margin="normal"
             value={formData.unite} 
             onChange={(e) => setFormData({ ...formData, unite: e.target.value })}
-            placeholder="kg, litres, doses, flacons..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder="kg, l, doses..."
           />
-          
           <TextField
             fullWidth 
-            label="Seuil d'alerte" 
+            label={t('Alert threshold')} 
             type="number" 
             margin="normal"
             value={formData.seuilAlerte} 
             onChange={(e) => setFormData({ ...formData, seuilAlerte: e.target.value })}
-            helperText="Alerte quand la quantité est inférieure ou égale à ce seuil"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            helperText={t('Alert threshold helper')}
           />
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button
-            onClick={() => setOpen(false)}
-            sx={{
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
-              color: '#6b7280', border: '1px solid #e5e7eb',
-              '&:hover': { background: '#f9fafb' },
-            }}
-          >
-            Annuler
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={() => setOpen(false)} sx={{ color: 'text.secondary' }}>
+            {t('Cancel')}
           </Button>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            sx={{
-              background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-              borderRadius: '10px', textTransform: 'none', fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(20,83,45,0.3)',
-              '&:hover': {
-                background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-              },
-            }}
-          >
-            Enregistrer
+          <Button variant="contained" onClick={handleSave}>
+            {t('Save')}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* ── Dialogue pour les entrées/sorties ── */}
+      {/* ── Dialogue pour les mouvements ── */}
       <Dialog
         open={openMouvement}
         onClose={() => setOpenMouvement(false)}
-        maxWidth="sm"
+        maxWidth="xs"
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }
+          className: 'glass-card',
+          sx: { borderRadius: '24px', p: 1 }
         }}
       >
-        <DialogTitle sx={{
-          fontWeight: 800, fontSize: '1.1rem',
-          color: mouvementType === 'entree' ? '#16a34a' : '#ef4444',
-          pb: 0,
-          borderBottom: `1px solid ${GREEN_SOFT}`,
-          mb: 1,
+        <DialogTitle sx={{ 
+          fontWeight: 800, 
+          color: mouvementType === 'entree' ? theme.palette.success.main : theme.palette.error.main 
         }}>
-          {mouvementType === 'entree' ? '➕ Ajouter au stock' : '➖ Retirer du stock'}
+          {mouvementType === 'entree' ? t('Add to stock') : t('Remove from stock')}
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 2 }}>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2, borderRadius: '10px', fontSize: '0.84rem' }}>
-              {error}
-            </Alert>
-          )}
-          
-          <Box sx={{ 
-            p: 2, 
-            mb: 2, 
-            borderRadius: '10px', 
-            background: GREEN_GHOST,
-            border: `1px solid ${GREEN_SOFT}`
-          }}>
-            <Typography variant="body2" sx={{ mb: 0.5 }}>
-              <strong>Produit:</strong> {selectedStock?.nom}
+        <DialogContent>
+          <Box sx={{ p: 2, mb: 2, borderRadius: '12px', bgcolor: 'rgba(163, 230, 53, 0.05)', border: `1px solid ${theme.palette.divider}` }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              {selectedStock?.nom}
             </Typography>
-            <Typography variant="body2">
-              <strong>Stock actuel:</strong> {selectedStock?.quantite} {selectedStock?.unite}
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {t('Quantity')}: {selectedStock?.quantite} {selectedStock?.unite}
             </Typography>
           </Box>
           
           <TextField
             fullWidth 
-            label="Quantité" 
+            label={t('Quantity')} 
             type="number" 
             margin="normal"
             value={mouvementQuantite}
             onChange={(e) => setMouvementQuantite(e.target.value)}
             required
             autoFocus
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           />
-          
           <TextField
             fullWidth 
-            label="Raison (optionnel)" 
+            label={t('Reason (optional)')} 
             margin="normal"
             value={mouvementRaison}
             onChange={(e) => setMouvementRaison(e.target.value)}
-            placeholder={mouvementType === 'entree' ? "Livraison, Réapprovisionnement..." : "Consommation, Péremption, Don..."}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={mouvementType === 'entree' ? t('Reason placeholder in') : t('Reason placeholder out')}
           />
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button
-            onClick={() => setOpenMouvement(false)}
-            sx={{
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
-              color: '#6b7280', border: '1px solid #e5e7eb',
-              '&:hover': { background: '#f9fafb' },
-            }}
-          >
-            Annuler
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={() => setOpenMouvement(false)} sx={{ color: 'text.secondary' }}>
+            {t('Cancel')}
           </Button>
-          <Button
-            variant="contained"
+          <Button 
+            variant="contained" 
             onClick={handleMouvement}
-            sx={{
-              background: mouvementType === 'entree' 
-                ? 'linear-gradient(135deg, #16a34a 0%, #14532d 100%)'
-                : 'linear-gradient(135deg, #ef4444 0%, #991b1b 100%)',
-              borderRadius: '10px', 
-              textTransform: 'none', 
-              fontWeight: 700,
-              '&:hover': {
-                background: mouvementType === 'entree' 
-                  ? 'linear-gradient(135deg, #14532d 0%, #0d3d1a 100%)'
-                  : 'linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%)',
-              },
-            }}
+            color={mouvementType === 'entree' ? 'success' : 'error'}
           >
-            {mouvementType === 'entree' ? 'Ajouter' : 'Retirer'}
+            {mouvementType === 'entree' ? t('In') : t('Out')}
           </Button>
         </DialogActions>
       </Dialog>

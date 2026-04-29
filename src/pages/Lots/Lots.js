@@ -2,33 +2,33 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, IconButton, Dialog, DialogTitle, DialogContent,
-  TextField, DialogActions, Alert, Typography, Chip, Tooltip, MenuItem
+  TextField, DialogActions, Alert, Typography, Chip, Tooltip, MenuItem,
+  useTheme, Grid
 } from '@mui/material';
-import { Add, Edit, Delete, CheckCircle, Cancel, Agriculture } from '@mui/icons-material';
+import { Add, Edit, Delete, CheckCircle, Cancel } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getLots, addLot, updateLot, deleteLot, getBatiments } from '../../services/firestore';
-
-// ── palette ───────────────────────────────────────────────────────────────────
-const GREEN_DARK  = '#14532d';
-const GREEN_MID   = '#166534';
-const GREEN_MAIN  = '#16a34a';
-const GREEN_GHOST = '#f0fdf4';
-const GREEN_SOFT  = '#dcfce7';
+import { useSettings } from '../../contexts/SettingsContext';
 
 // ── Small chicken for decoration ─────────────────────────────────────────────
-function ChickenSmall({ size = 20, color = '#86efac' }) {
+function ChickenSmall({ size = 20, color = '#a3e635' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
       <ellipse cx="32" cy="40" rx="18" ry="14" fill={color} opacity="0.9"/>
       <circle cx="44" cy="22" r="10" fill={color} opacity="0.9"/>
       <path d="M41 13 Q43 8 45 13 Q47 7 49 13" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" fill="none"/>
       <path d="M53 23 L58 21 L53 25 Z" fill="#f59e0b"/>
-      <circle cx="47" cy="21" r="2" fill={GREEN_DARK}/>
+      <circle cx="47" cy="21" r="2" fill="#0f172a"/>
       <ellipse cx="52" cy="26" rx="2.5" ry="3.5" fill="#ef4444" opacity="0.9"/>
     </svg>
   );
 }
 
 export default function Lots() {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const { settings } = useSettings();
   const [lots, setLots] = useState([]);
   const [batiments, setBatiments] = useState([]);
   const [open, setOpen] = useState(false);
@@ -60,16 +60,16 @@ export default function Lots() {
 
   const handleSave = async () => {
     if (!formData.batimentId || !formData.nbInitial) {
-      setError('Bâtiment et nombre initial sont requis');
+      setError(t('Batch requirements'));
       return;
     }
     try {
       if (editing) {
         await updateLot(editing.id, formData);
-        setSuccess('Lot modifié');
+        setSuccess(t('Batch updated'));
       } else {
         await addLot(formData);
-        setSuccess('Lot ajouté');
+        setSuccess(t('Batch added'));
       }
       setOpen(false);
       setEditing(null);
@@ -82,21 +82,23 @@ export default function Lots() {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Supprimer ce lot ?')) {
+    if (window.confirm(t('Delete batch confirmation'))) {
       await deleteLot(id);
+      setSuccess(t('Batch deleted'));
       loadLots();
+      setTimeout(() => setSuccess(''), 3000);
     }
   };
 
   const handleChangeStatut = async (lot, nouveauStatut) => {
     const message = nouveauStatut === 'termine' 
-      ? 'Confirmer la clôture de ce lot ?' 
-      : 'Confirmer la réouverture de ce lot ?';
+      ? t('Close confirmation') 
+      : t('Reopen confirmation');
     
     if (window.confirm(message)) {
       try {
         await updateLot(lot.id, { ...lot, statut: nouveauStatut });
-        setSuccess(`Lot ${nouveauStatut === 'termine' ? 'clôturé' : 'réouvert'} avec succès`);
+        setSuccess(nouveauStatut === 'termine' ? t('Batch closed') : t('Batch reopened'));
         loadLots();
         setTimeout(() => setSuccess(''), 3000);
       } catch (err) {
@@ -115,189 +117,147 @@ export default function Lots() {
 
   const getStatutText = (statut) => {
     switch(statut) {
-      case 'actif': return '✅ Actif';
-      case 'termine': return '📌 Terminé';
+      case 'actif': return t('Active Status');
+      case 'termine': return t('Finished Status');
       default: return statut;
     }
   };
 
-  // Obtenir le nom du bâtiment à partir de l'ID
   const getBatimentNom = (batimentId) => {
     const batiment = batiments.find(b => b.id === batimentId);
     return batiment ? batiment.nom : batimentId;
   };
 
-  // Calcul des statistiques
-  const lotsActifs = lots.filter(l => l.statut === 'actif').length;
-  const lotsTermines = lots.filter(l => l.statut === 'termine').length;
-  const totalVolailles = lots
+  const lotsActifsCount = lots.filter(l => l.statut === 'actif').length;
+  const lotsTerminesCount = lots.filter(l => l.statut === 'termine').length;
+  const totalVolaillesCount = lots
     .filter(l => l.statut === 'actif')
     .reduce((sum, l) => sum + (Number(l.nbInitial) || 0), 0);
 
   return (
-    <Box sx={{ maxWidth: 1100 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
-          <Typography sx={{ fontSize: '1.9rem', fontWeight: 800, color: GREEN_DARK, letterSpacing: '-0.3px' }}>
-            Gestion des Lots
+          <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('Batch Management')}
           </Typography>
-          <Typography sx={{ fontSize: '0.88rem', color: '#6b7280', mt: 0.3 }}>
-            Gérez vos lots d'élevage et suivez leur progression
+          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {t('Manage Batches')}
           </Typography>
         </Box>
         <Button
           variant="contained"
           startIcon={<Add />}
           onClick={() => setOpen(true)}
-          sx={{
-            background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-            borderRadius: '10px',
-            textTransform: 'none',
-            fontWeight: 700,
-            fontSize: '0.85rem',
-            px: 2.5, py: 1,
-            boxShadow: '0 4px 14px rgba(20,83,45,0.3)',
-            '&:hover': {
-              background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-              boxShadow: '0 6px 18px rgba(20,83,45,0.4)',
-            },
-          }}
+          sx={{ px: 3, py: 1.2, borderRadius: '12px' }}
         >
-          Nouveau lot
+          {t('New Batch')}
         </Button>
       </Box>
 
       {success && (
-        <Alert severity="success" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>
           {success}
         </Alert>
       )}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>
           {error}
         </Alert>
       )}
 
       {/* ── Summary cards ── */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+      <Grid container spacing={settings.compactMode ? 1.5 : 2} sx={{ mb: 4 }}>
         {[
-          { label: 'Lots actifs', value: lotsActifs, icon: '✅' },
-          { label: 'Lots terminés', value: lotsTermines, icon: '📌' },
-          { label: 'Volailles en élevage', value: totalVolailles.toLocaleString('fr-FR'), icon: '🐔' },
-          { label: 'Total lots', value: lots.length, icon: '📊' },
+          { label: t('Active Batches'), value: lotsActifsCount, icon: '✅', color: theme.palette.primary.main },
+          { label: t('Finished Batches'), value: lotsTerminesCount, icon: '📌', color: theme.palette.text.secondary },
+          { label: t('Poultry in breeding'), value: totalVolaillesCount.toLocaleString(), icon: '🐔', color: '#3b82f6' },
+          { label: t('Total Batches'), value: lots.length, icon: '📊', color: '#fbbf24' },
         ].map((c, i) => (
-          <Box key={i} sx={{
-            flex: 1, minWidth: 160,
-            p: 2, borderRadius: '14px',
-            background: i === 0
-              ? `linear-gradient(135deg, ${GREEN_DARK} 0%, ${GREEN_MID} 100%)`
-              : '#fff',
-            border: i === 0 ? 'none' : '1px solid #e5e7eb',
-            boxShadow: i === 0
-              ? '0 4px 18px rgba(20,83,45,0.25)'
-              : '0 1px 4px rgba(0,0,0,0.06)',
-          }}>
-            <Typography sx={{ fontSize: '1.1rem', mb: 0.5 }}>{c.icon}</Typography>
-            <Typography sx={{
-              fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.1,
-              color: i === 0 ? '#fff' : GREEN_DARK,
+          <Grid item xs={12} sm={6} md={3} key={i}>
+            <Paper className="glass-card" sx={{
+              p: 2.5, borderRadius: '20px',
+              border: i === 0 ? `1px solid ${theme.palette.primary.main}40` : '1px solid rgba(148, 163, 184, 0.1)',
+              background: i === 0 ? `linear-gradient(135deg, ${theme.palette.primary.main}08 0%, transparent 100%)` : 'transparent',
             }}>
-              {c.value}
-            </Typography>
-            <Typography sx={{
-              fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              color: i === 0 ? '#86efac' : '#9ca3af',
-              mt: 0.3,
-            }}>
-              {c.label}
-            </Typography>
-          </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                <Typography sx={{ fontSize: '1.2rem' }}>{c.icon}</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {c.label}
+                </Typography>
+              </Box>
+              <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary' }}>
+                {c.value}
+              </Typography>
+            </Paper>
+          </Grid>
         ))}
-      </Box>
+      </Grid>
 
       {/* ── Table ── */}
-      <Paper sx={{
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
-        overflow: 'hidden',
-      }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ background: GREEN_GHOST }}>
-                {['Bâtiment', 'Nb initial', 'Date arrivée', 'Type', 'Statut', 'Actions'].map((h) => (
-                  <TableCell key={h} sx={{
-                    fontWeight: 700, fontSize: '0.72rem',
-                    letterSpacing: '0.08em', textTransform: 'uppercase',
-                    color: GREEN_DARK,
-                    borderBottom: `2px solid ${GREEN_SOFT}`,
-                    py: 1.5,
-                  }}>
-                    {h}
-                  </TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
+      <TableContainer component={Paper} className="glass-card" sx={{ borderRadius: '24px', overflow: 'hidden' }}>
+        <Table stickyHeader>
+          <TableHead>
+            <TableRow>
+              <TableCell>{t('Building')}</TableCell>
+              <TableCell>{t('Initial Nb')}</TableCell>
+              <TableCell>{t('Arrival Date')}</TableCell>
+              <TableCell>{t('TYPE')}</TableCell>
+              <TableCell>{t('STATUS')}</TableCell>
+              <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>{t('ACTIONS')}</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            <AnimatePresence>
               {lots.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 6, color: '#9ca3af', fontSize: '0.88rem' }}>
-                    🐔 Aucun lot enregistré. Ajoutez votre premier lot.
+                  <TableCell colSpan={6} sx={{ textAlign: 'center', py: 8 }}>
+                    <Typography sx={{ color: 'text.secondary' }}>{t('No batch found')}</Typography>
                   </TableCell>
                 </TableRow>
               ) : lots.map((lot, idx) => (
                 <TableRow
                   key={lot.id}
-                  sx={{
-                    '&:hover': { background: GREEN_GHOST },
-                    background: idx % 2 === 0 ? '#fff' : '#fafafa',
-                    transition: 'background 0.15s',
-                    opacity: lot.statut === 'termine' ? 0.7 : 1,
+                  component={motion.tr}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  sx={{ 
+                    '&:hover': { bgcolor: 'rgba(163, 230, 53, 0.04)' },
+                    opacity: lot.statut === 'termine' ? 0.6 : 1,
                   }}
                 >
                   <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <Box sx={{
-                        width: 32, height: 32, borderRadius: '8px',
-                        background: GREEN_SOFT,
+                        width: 36, height: 36, borderRadius: '10px',
+                        bgcolor: 'rgba(163, 230, 53, 0.1)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0,
                       }}>
-                        <ChickenSmall size={18} color={GREEN_MAIN} />
+                        <ChickenSmall size={20} color={theme.palette.primary.main} />
                       </Box>
-                      <Typography sx={{ fontWeight: 600, fontSize: '0.88rem', color: GREEN_DARK }}>
+                      <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
                         {getBatimentNom(lot.batimentId)}
                       </Typography>
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Typography sx={{ fontWeight: 600, fontSize: '0.88rem', color: '#374151' }}>
-                      {Number(lot.nbInitial).toLocaleString('fr-FR')}
-                      <Typography component="span" sx={{ fontSize: '0.75rem', color: '#9ca3af', ml: 0.5 }}>
-                        sujets
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
+                      {Number(lot.nbInitial).toLocaleString()}
+                      <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary', ml: 0.5 }}>
+                        {t('subjects')}
                       </Typography>
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography sx={{ fontSize: '0.88rem', color: '#374151' }}>
-                      {lot.dateArrivee?.toDate?.().toLocaleDateString('fr-FR') || '-'}
-                    </Typography>
+                  <TableCell sx={{ color: 'text.secondary' }}>
+                    {lot.dateArrivee?.toDate?.().toLocaleDateString() || lot.dateArrivee || '-'}
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={lot.typeVolailles || 'Standard'}
+                      label={lot.typeVolailles || t('Standard')}
                       size="small"
-                      sx={{
-                        background: GREEN_SOFT,
-                        color: GREEN_DARK,
-                        fontWeight: 700,
-                        fontSize: '0.7rem',
-                        height: 22,
-                        borderRadius: '6px',
-                      }}
+                      sx={{ bgcolor: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6', fontWeight: 700, fontSize: '0.65rem' }}
                     />
                   </TableCell>
                   <TableCell>
@@ -305,60 +265,44 @@ export default function Lots() {
                       label={getStatutText(lot.statut)} 
                       color={getStatutColor(lot.statut)}
                       size="small"
-                      sx={{
-                        fontWeight: 700,
-                        fontSize: '0.7rem',
-                        height: 24,
-                      }}
+                      sx={{ fontWeight: 700, fontSize: '0.65rem' }}
                     />
                   </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <Tooltip title="Modifier">
+                  <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>
+                    <Box sx={{ display: 'flex', gap: 0.5, justifyContent: settings.language === 'ar' ? 'flex-start' : 'flex-end' }}>
+                      <Tooltip title={t('Edit')}>
                         <IconButton 
                           size="small"
                           onClick={() => { 
                             setEditing(lot); 
                             setFormData({ 
                               ...lot, 
-                              dateArrivee: lot.dateArrivee?.toDate?.().toISOString().split('T')[0] || '' 
+                              dateArrivee: lot.dateArrivee?.toDate?.().toISOString().split('T')[0] || lot.dateArrivee || '' 
                             }); 
                             setOpen(true);
                           }}
                           disabled={lot.statut === 'termine'}
-                          sx={{
-                            borderRadius: '8px',
-                            color: lot.statut === 'termine' ? '#9ca3af' : GREEN_MAIN,
-                            '&:hover': { background: GREEN_SOFT },
-                          }}
+                          sx={{ color: theme.palette.primary.main }}
                         >
                           <Edit fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       
-                      <Tooltip title={lot.statut === 'actif' ? 'Clôturer le lot' : 'Rouvrir le lot'}>
+                      <Tooltip title={lot.statut === 'actif' ? t('Close confirmation') : t('Reopen confirmation')}>
                         <IconButton 
                           size="small"
                           onClick={() => handleChangeStatut(lot, lot.statut === 'actif' ? 'termine' : 'actif')}
-                          sx={{
-                            borderRadius: '8px',
-                            color: lot.statut === 'actif' ? '#16a34a' : '#f59e0b',
-                            '&:hover': { background: lot.statut === 'actif' ? GREEN_SOFT : '#fffbeb' },
-                          }}
+                          sx={{ color: lot.statut === 'actif' ? '#16a34a' : '#f59e0b' }}
                         >
                           {lot.statut === 'actif' ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />}
                         </IconButton>
                       </Tooltip>
                       
-                      <Tooltip title="Supprimer">
+                      <Tooltip title={t('Delete')}>
                         <IconButton 
                           size="small"
                           onClick={() => handleDelete(lot.id)}
-                          sx={{
-                            borderRadius: '8px',
-                            color: '#ef4444',
-                            '&:hover': { background: '#fef2f2' },
-                          }}
+                          sx={{ color: '#ef4444' }}
                         >
                           <Delete fontSize="small" />
                         </IconButton>
@@ -367,54 +311,34 @@ export default function Lots() {
                   </TableCell>
                 </TableRow>
               ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+            </AnimatePresence>
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       {/* ── Dialog ── */}
       <Dialog
         open={open}
         onClose={() => setOpen(false)}
-        maxWidth="sm"
+        maxWidth="xs"
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }
+          className: 'glass-card',
+          sx: { borderRadius: '24px', p: 1 }
         }}
       >
-        <DialogTitle sx={{
-          fontWeight: 800, fontSize: '1.1rem',
-          color: GREEN_DARK, pb: 0,
-          borderBottom: `1px solid ${GREEN_SOFT}`,
-          mb: 1,
-        }}>
-          {editing ? '✏️ Modifier le lot' : '🐔 Nouveau lot'}
+        <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
+          {editing ? t('Edit') + ' ' + t('Lots') : t('New Batch')}
         </DialogTitle>
 
-        <DialogContent sx={{ pt: 2 }}>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2, borderRadius: '10px', fontSize: '0.84rem' }}>
-              {error}
-            </Alert>
-          )}
-          
+        <DialogContent>
           <TextField
             select
             fullWidth
-            label="Bâtiment"
+            label={t('Building')}
             margin="normal"
             value={formData.batimentId}
             onChange={(e) => setFormData({ ...formData, batimentId: e.target.value })}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           >
             {batiments.map((b) => (
               <MenuItem key={b.id} value={b.id}>{b.nom}</MenuItem>
@@ -423,103 +347,53 @@ export default function Lots() {
           
           <TextField 
             fullWidth 
-            label="Nombre initial" 
+            label={t('Initial Number')} 
             type="number" 
             margin="normal"
             value={formData.nbInitial} 
             onChange={(e) => setFormData({ ...formData, nbInitial: e.target.value })}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           />
           
           <TextField 
             fullWidth 
-            label="Date d'arrivée" 
+            label={t('Arrival Date')} 
             type="date" 
             margin="normal"
             value={formData.dateArrivee} 
             onChange={(e) => setFormData({ ...formData, dateArrivee: e.target.value })}
             InputLabelProps={{ shrink: true }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           />
           
           <TextField 
             fullWidth 
-            label="Type de volailles" 
+            label={t('Poultry Type')} 
             margin="normal"
             value={formData.typeVolailles} 
             onChange={(e) => setFormData({ ...formData, typeVolailles: e.target.value })}
-            placeholder="ex: Poulet de chair, Pondeuse..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Poultry type placeholder')}
           />
           
           {editing && (
             <TextField
               select
               fullWidth
-              label="Statut"
+              label={t('STATUS')}
               margin="normal"
               value={formData.statut}
               onChange={(e) => setFormData({ ...formData, statut: e.target.value })}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '10px',
-                  '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-                },
-                '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-              }}
             >
-              <MenuItem value="actif">✅ Actif</MenuItem>
-              <MenuItem value="termine">📌 Terminé</MenuItem>
+              <MenuItem value="actif">{t('Active Status')}</MenuItem>
+              <MenuItem value="termine">{t('Finished Status')}</MenuItem>
             </TextField>
           )}
         </DialogContent>
 
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button
-            onClick={() => {
-              setOpen(false);
-              setEditing(null);
-              setError('');
-            }}
-            sx={{
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
-              color: '#6b7280', border: '1px solid #e5e7eb',
-              '&:hover': { background: '#f9fafb' },
-            }}
-          >
-            Annuler
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={() => { setOpen(false); setEditing(null); setError(''); }} sx={{ color: 'text.secondary' }}>
+            {t('Cancel')}
           </Button>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            sx={{
-              background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-              borderRadius: '10px', textTransform: 'none', fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(20,83,45,0.3)',
-              '&:hover': {
-                background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-              },
-            }}
-          >
-            Enregistrer
+          <Button variant="contained" onClick={handleSave}>
+            {t('Save')}
           </Button>
         </DialogActions>
       </Dialog>

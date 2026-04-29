@@ -3,11 +3,14 @@ import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, IconButton, Dialog, DialogTitle, DialogContent,
   TextField, DialogActions, Alert, Chip, MenuItem, FormControl,
-  InputLabel, Select, Typography, Tooltip, Grid
+  InputLabel, Select, Typography, Tooltip, Grid, useTheme
 } from '@mui/material';
 import { Add, Edit, Delete, Refresh, Visibility, MedicalServices, Warning } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getLots, getBatiments } from '../../services/firestore';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSettings } from '../../contexts/SettingsContext';
 import { 
   getInterventions, 
   addIntervention, 
@@ -16,22 +19,15 @@ import {
   typesIntervention
 } from '../../services/firestore';
 
-// ── palette ───────────────────────────────────────────────────────────────────
-const GREEN_DARK  = '#14532d';
-const GREEN_MID   = '#166534';
-const GREEN_MAIN  = '#16a34a';
-const GREEN_GHOST = '#f0fdf4';
-const GREEN_SOFT  = '#dcfce7';
-
 // ── Small chicken for decoration ─────────────────────────────────────────────
-function ChickenSmall({ size = 20, color = '#86efac' }) {
+function ChickenSmall({ size = 20, color = '#a3e635' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
       <ellipse cx="32" cy="40" rx="18" ry="14" fill={color} opacity="0.9"/>
       <circle cx="44" cy="22" r="10" fill={color} opacity="0.9"/>
       <path d="M41 13 Q43 8 45 13 Q47 7 49 13" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" fill="none"/>
       <path d="M53 23 L58 21 L53 25 Z" fill="#f59e0b"/>
-      <circle cx="47" cy="21" r="2" fill={GREEN_DARK}/>
+      <circle cx="47" cy="21" r="2" fill="#0f172a"/>
       <ellipse cx="52" cy="26" rx="2.5" ry="3.5" fill="#ef4444" opacity="0.9"/>
     </svg>
   );
@@ -39,30 +35,29 @@ function ChickenSmall({ size = 20, color = '#86efac' }) {
 
 // ── Stat card component ──────────────────────────────────────────────────────
 function StatCard({ value, label, icon, active }) {
+  const theme = useTheme();
   return (
     <Box sx={{
       flex: 1, minWidth: 160,
-      p: 2, borderRadius: '14px',
+      p: 2.5, borderRadius: '20px',
       background: active
-        ? `linear-gradient(135deg, ${GREEN_DARK} 0%, ${GREEN_MID} 100%)`
-        : '#fff',
-      border: active ? 'none' : '1px solid #e5e7eb',
-      boxShadow: active
-        ? '0 4px 18px rgba(20,83,45,0.25)'
-        : '0 1px 4px rgba(0,0,0,0.06)',
+        ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`
+        : theme.palette.background.paper,
+      border: `1px solid ${theme.palette.divider}`,
+      boxShadow: active ? `0 8px 24px ${theme.palette.primary.main}20` : 'none',
     }}>
-      <Typography sx={{ fontSize: '1.1rem', mb: 0.5 }}>{icon}</Typography>
+      <Typography sx={{ fontSize: '1.2rem', mb: 0.5 }}>{icon}</Typography>
       <Typography sx={{
-        fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.1,
-        color: active ? '#fff' : GREEN_DARK,
+        fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.1,
+        color: active ? '#fff' : 'text.primary',
       }}>
         {value}
       </Typography>
       <Typography sx={{
-        fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em',
+        fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em',
         textTransform: 'uppercase',
-        color: active ? '#86efac' : '#9ca3af',
-        mt: 0.3,
+        color: active ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+        mt: 0.5,
       }}>
         {label}
       </Typography>
@@ -71,6 +66,9 @@ function StatCard({ value, label, icon, active }) {
 }
 
 export default function Interventions() {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const { settings } = useSettings();
   const { userRole } = useAuth();
   const [lots, setLots] = useState([]);
   const [batiments, setBatiments] = useState([]);
@@ -93,13 +91,10 @@ export default function Interventions() {
   const [viewOpen, setViewOpen] = useState(false);
   const [selectedIntervention, setSelectedIntervention] = useState(null);
 
-  // Définir les permissions selon le rôle
   const canEdit = userRole === 'admin' || userRole === 'responsable';
   const canDelete = userRole === 'admin' || userRole === 'responsable';
   const canAdd = userRole === 'admin' || userRole === 'responsable' || userRole === 'technicien';
-  const canView = true;
 
-  // Charger les lots et bâtiments
   useEffect(() => {
     loadLots();
     loadBatiments();
@@ -123,14 +118,12 @@ export default function Interventions() {
     }
   };
 
-  // Obtenir le nom du bâtiment
   const getBatimentNom = (batimentId) => {
-    if (!batimentId) return 'Non assigné';
+    if (!batimentId) return t('Inactive');
     const batiment = batiments.find(b => b.id === batimentId);
     return batiment ? batiment.nom : batimentId;
   };
 
-  // Charger les interventions
   const loadInterventions = useCallback(async () => {
     if (!selectedLot) return;
     try {
@@ -145,7 +138,6 @@ export default function Interventions() {
     loadInterventions();
   }, [selectedLot, loadInterventions]);
 
-  // Mettre à jour les détails du lot sélectionné
   useEffect(() => {
     if (selectedLot) {
       const lot = lots.find(l => l.id === selectedLot);
@@ -160,17 +152,17 @@ export default function Interventions() {
     setSuccess('');
     
     if (!formData.type || !formData.date) {
-      setError('Type et date sont requis');
+      setError(t('Type and date required'));
       return;
     }
 
     try {
       if (editing) {
         await updateIntervention(selectedLot, editing.id, formData);
-        setSuccess('Intervention modifiée');
+        setSuccess(t('Intervention updated'));
       } else {
         await addIntervention(selectedLot, formData);
-        setSuccess('Intervention ajoutée');
+        setSuccess(t('Intervention added'));
       }
       
       setOpen(false);
@@ -192,10 +184,10 @@ export default function Interventions() {
   };
 
   const handleDelete = async (intervention) => {
-    if (window.confirm('Supprimer cette intervention ?')) {
+    if (window.confirm(t('Delete intervention confirmation'))) {
       try {
         await deleteIntervention(selectedLot, intervention.id);
-        setSuccess('Intervention supprimée');
+        setSuccess(t('Intervention deleted'));
         loadInterventions();
         setTimeout(() => setSuccess(''), 3000);
       } catch (err) {
@@ -216,86 +208,73 @@ export default function Interventions() {
     }
   };
 
-  // Statistiques
   const totalInterventions = interventions.length;
 
   return (
-    <Box sx={{ maxWidth: 1100 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
-          <Typography sx={{ fontSize: '1.9rem', fontWeight: 800, color: GREEN_DARK, letterSpacing: '-0.3px' }}>
-            Interventions
+          <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('Interventions')}
           </Typography>
-          <Typography sx={{ fontSize: '0.88rem', color: '#6b7280', mt: 0.3 }}>
-            Gérez les interventions sanitaires et techniques par lot
+          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {t('Interventions Subtitle')}
           </Typography>
         </Box>
-        <Tooltip title="Rafraîchir">
+        <Tooltip title={t('Refresh')}>
           <IconButton
             onClick={loadInterventions}
             sx={{
-              background: GREEN_GHOST,
-              borderRadius: '10px',
-              '&:hover': { background: GREEN_SOFT },
+              background: 'rgba(163, 230, 53, 0.1)',
+              borderRadius: '12px',
+              color: theme.palette.primary.main,
+              '&:hover': { background: 'rgba(163, 230, 53, 0.2)' },
             }}
           >
-            <Refresh sx={{ color: GREEN_MAIN }} />
+            <Refresh />
           </IconButton>
         </Tooltip>
       </Box>
 
       {success && (
-        <Alert severity="success" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>
           {success}
         </Alert>
       )}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>
           {error}
         </Alert>
       )}
 
       {/* ── Selection du lot ── */}
-      <Paper sx={{
-        p: 3, mb: 3,
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
-      }}>
-        <Typography sx={{
-          fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.12em',
-          color: '#9ca3af', textTransform: 'uppercase', mb: 2,
-        }}>
-          Sélection du lot
+      <Paper className="glass-card" sx={{ p: 3, mb: 4, borderRadius: '24px' }}>
+        <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 2, display: 'block', letterSpacing: '0.1em' }}>
+          {t('Select Batch')}
         </Typography>
         
         <TextField
           select
           fullWidth
-          label="Lot actif"
+          label={t('Active Batch')}
           value={selectedLot}
           onChange={(e) => setSelectedLot(e.target.value)}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '10px',
-              '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-            },
-            '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-          }}
         >
           {lots.length === 0 ? (
-            <MenuItem disabled>Aucun lot actif</MenuItem>
+            <MenuItem disabled>{t('No active batch available')}</MenuItem>
           ) : (
             lots.map((lot) => (
               <MenuItem key={lot.id} value={lot.id}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <ChickenSmall size={16} color={GREEN_MAIN} />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <ChickenSmall size={18} color={theme.palette.primary.main} />
                   <span>
-                    Lot du {lot.dateArrivee?.toDate?.().toLocaleDateString('fr-FR') || 'N/A'} 
-                    {' - Bâtiment: '}{getBatimentNom(lot.batimentId)}
-                    {' - '}{lot.nbInitial} sujets
-                    {lot.typeVolailles && ` (${lot.typeVolailles})`}
+                    {t('Batch info', {
+                      date: lot.dateArrivee?.toDate?.().toLocaleDateString() || lot.dateArrivee || 'N/A',
+                      batiment: getBatimentNom(lot.batimentId),
+                      count: lot.nbInitial,
+                      type: lot.typeVolailles ? `(${lot.typeVolailles})` : ''
+                    })}
                   </span>
                 </Box>
               </MenuItem>
@@ -307,168 +286,142 @@ export default function Interventions() {
       {selectedLot && selectedLotDetails && (
         <>
           {/* ── Cartes de statistiques ── */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} md={4}>
               <StatCard 
                 value={totalInterventions} 
-                label="Total interventions" 
+                label={t('Total Interventions')} 
                 icon="📋" 
                 active={true}
               />
             </Grid>
             <Grid item xs={12} md={8}>
-              <Paper sx={{
-                p: 2.5, height: '100%',
-                borderRadius: '16px',
-                border: '1px solid #e5e7eb',
-                background: GREEN_GHOST,
-              }}>
-                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', mb: 1.5 }}>
-                  INFORMATIONS DU LOT
+              <Paper className="glass-card" sx={{ p: 3, height: '100%', borderRadius: '24px', bgcolor: 'rgba(163, 230, 53, 0.03)' }}>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mb: 2, display: 'block', letterSpacing: '0.1em' }}>
+                  {t('BATCH INFORMATION')}
                 </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography sx={{ color: '#6b7280', fontSize: '0.75rem' }}>Bâtiment</Typography>
-                    <Typography sx={{ fontWeight: 600, color: GREEN_DARK, fontSize: '0.9rem' }}>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('Building')}</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
                       {getBatimentNom(selectedLotDetails.batimentId)}
                     </Typography>
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography sx={{ color: '#6b7280', fontSize: '0.75rem' }}>Nombre initial</Typography>
-                    <Typography sx={{ fontWeight: 600, color: GREEN_DARK, fontSize: '0.9rem' }}>
-                      {selectedLotDetails.nbInitial} sujets
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('Initial Nb')}</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
+                      {selectedLotDetails.nbInitial} {t('subjects')}
                     </Typography>
-                  </Box>
-                  <Box sx={{ flex: 1 }}>
-                    <Typography sx={{ color: '#6b7280', fontSize: '0.75rem' }}>Type de volailles</Typography>
-                    <Typography sx={{ fontWeight: 600, color: GREEN_DARK, fontSize: '0.9rem' }}>
-                      {selectedLotDetails.typeVolailles || 'Standard'}
+                  </Grid>
+                  <Grid item xs={12} sm={4}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>{t('TYPE')}</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>
+                      {selectedLotDetails.typeVolailles || t('Standard')}
                     </Typography>
-                  </Box>
-                </Box>
+                  </Grid>
+                </Grid>
               </Paper>
             </Grid>
           </Grid>
 
           {/* ── Bouton Ajouter ── */}
           {canAdd && (
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
               <Button
                 variant="contained"
                 startIcon={<Add />}
                 onClick={() => setOpen(true)}
-                sx={{
-                  background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-                  borderRadius: '10px',
-                  textTransform: 'none',
-                  fontWeight: 700,
-                  px: 2.5, py: 1,
-                  '&:hover': {
-                    background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-                  },
-                }}
+                sx={{ px: 3, py: 1.2, borderRadius: '12px' }}
               >
-                Nouvelle intervention
+                {t('New Intervention')}
               </Button>
             </Box>
           )}
 
           {/* ── Tableau des interventions ── */}
-          <Paper sx={{
-            borderRadius: '16px',
-            border: '1px solid #e5e7eb',
-            boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
-            overflow: 'hidden',
-          }}>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow sx={{ background: GREEN_GHOST }}>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Type</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Description</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Responsable</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Produits</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }} align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
+          <TableContainer component={Paper} className="glass-card" sx={{ borderRadius: '24px', overflow: 'hidden' }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t('Date')}</TableCell>
+                  <TableCell>{t('Type')}</TableCell>
+                  <TableCell>{t('Description')}</TableCell>
+                  <TableCell>{t('Responsible')}</TableCell>
+                  <TableCell>{t('Products used')}</TableCell>
+                  <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>{t('ACTIONS')}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <AnimatePresence>
                   {interventions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} sx={{ textAlign: 'center', py: 6, color: '#9ca3af', fontSize: '0.88rem' }}>
-                        <MedicalServices sx={{ fontSize: 40, mb: 1, color: '#9ca3af' }} />
-                        <Typography>Aucune intervention enregistrée pour ce lot</Typography>
+                      <TableCell colSpan={6} sx={{ textAlign: 'center', py: 8 }}>
+                        <MedicalServices sx={{ fontSize: 48, mb: 2, color: 'text.secondary', opacity: 0.5 }} />
+                        <Typography sx={{ color: 'text.secondary' }}>{t('No intervention recorded')}</Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
                     interventions.map((intervention, idx) => (
                       <TableRow 
                         key={intervention.id} 
-                        sx={{ 
-                          '&:hover': { background: GREEN_GHOST },
-                          background: idx % 2 === 0 ? '#fff' : '#fafafa',
-                        }}
+                        component={motion.tr}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        sx={{ '&:hover': { bgcolor: 'rgba(163, 230, 53, 0.04)' } }}
                       >
                         <TableCell>
-                          <Typography sx={{ fontSize: '0.88rem' }}>
-                            {intervention.date?.toDate?.().toLocaleDateString('fr-FR')}
+                          <Typography sx={{ fontSize: '0.88rem', fontWeight: 600 }}>
+                            {intervention.date?.toDate?.().toLocaleDateString() || intervention.date}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Chip 
-                            label={intervention.type} 
+                            label={t(intervention.type)} 
                             color={getTypeColor(intervention.type)}
                             size="small"
-                            sx={{ fontWeight: 600, fontSize: '0.7rem' }}
+                            sx={{ fontWeight: 800, fontSize: '0.65rem' }}
                           />
                         </TableCell>
                         <TableCell>
-                          <Typography sx={{ fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {intervention.description || '-'}
                           </Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography sx={{ fontSize: '0.85rem' }}>{intervention.responsable || '-'}</Typography>
+                          <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{intervention.responsable || '-'}</Typography>
                         </TableCell>
                         <TableCell>
-                          <Typography sx={{ fontSize: '0.85rem' }}>{intervention.produits || '-'}</Typography>
+                          <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary' }}>{intervention.produits || '-'}</Typography>
                         </TableCell>
-                        <TableCell align="center">
-                          <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                            <Tooltip title="Voir les détails">
+                        <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>
+                          <Box sx={{ display: 'flex', gap: 0.5, justifyContent: settings.language === 'ar' ? 'flex-start' : 'flex-end' }}>
+                            <Tooltip title={t('Intervention Detail')}>
                               <IconButton
                                 size="small"
                                 onClick={() => {
                                   setSelectedIntervention(intervention);
                                   setViewOpen(true);
                                 }}
-                                sx={{
-                                  borderRadius: '8px',
-                                  color: '#3b82f6',
-                                  '&:hover': { background: '#eff6ff' },
-                                }}
+                                sx={{ color: '#3b82f6' }}
                               >
                                 <Visibility fontSize="small" />
                               </IconButton>
                             </Tooltip>
                             
                             {canEdit && (
-                              <Tooltip title="Modifier">
+                              <Tooltip title={t('Edit')}>
                                 <IconButton
                                   size="small"
                                   onClick={() => { 
                                     setEditing(intervention); 
                                     setFormData({
                                       ...intervention,
-                                      date: intervention.date?.toDate?.().toISOString().split('T')[0] || new Date().toISOString().split('T')[0]
+                                      date: intervention.date?.toDate?.().toISOString().split('T')[0] || intervention.date || new Date().toISOString().split('T')[0]
                                     }); 
                                     setOpen(true);
                                   }}
-                                  sx={{
-                                    borderRadius: '8px',
-                                    color: GREEN_MAIN,
-                                    '&:hover': { background: GREEN_SOFT },
-                                  }}
+                                  sx={{ color: theme.palette.primary.main }}
                                 >
                                   <Edit fontSize="small" />
                                 </IconButton>
@@ -476,15 +429,11 @@ export default function Interventions() {
                             )}
                             
                             {canDelete && (
-                              <Tooltip title="Supprimer">
+                              <Tooltip title={t('Delete')}>
                                 <IconButton
                                   size="small"
                                   onClick={() => handleDelete(intervention)}
-                                  sx={{
-                                    borderRadius: '8px',
-                                    color: '#ef4444',
-                                    '&:hover': { background: '#fef2f2' },
-                                  }}
+                                  sx={{ color: '#ef4444' }}
                                 >
                                   <Delete fontSize="small" />
                                 </IconButton>
@@ -495,40 +444,30 @@ export default function Interventions() {
                       </TableRow>
                     ))
                   )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
+                </AnimatePresence>
+              </TableBody>
+            </Table>
+          </TableContainer>
         </>
       )}
 
       {!selectedLot && lots.length > 0 && (
-        <Paper sx={{
-          p: 4, textAlign: 'center',
-          borderRadius: '16px',
-          background: GREEN_GHOST,
-          border: `1px dashed ${GREEN_MAIN}`,
-        }}>
-          <ChickenSmall size={40} color={GREEN_MAIN} />
-          <Typography sx={{ mt: 2, color: '#6b7280' }}>
-            Sélectionnez un lot pour voir les interventions
+        <Paper className="glass-card" sx={{ p: 6, textAlign: 'center', borderRadius: '24px', border: `2px dashed ${theme.palette.divider}` }}>
+          <ChickenSmall size={48} color={theme.palette.primary.main} />
+          <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary', fontWeight: 700 }}>
+            {t('Select batch to see interventions')}
           </Typography>
         </Paper>
       )}
 
       {lots.length === 0 && (
-        <Paper sx={{
-          p: 4, textAlign: 'center',
-          borderRadius: '16px',
-          background: '#fef2f2',
-          border: '1px dashed #ef4444',
-        }}>
-          <Warning sx={{ fontSize: 40, color: '#ef4444', mb: 1 }} />
-          <Typography sx={{ color: '#dc2626', fontWeight: 600 }}>
-            Aucun lot actif disponible
+        <Paper className="glass-card" sx={{ p: 6, textAlign: 'center', borderRadius: '24px', border: `2px dashed ${theme.palette.error.main}40`, bgcolor: 'rgba(239, 68, 68, 0.05)' }}>
+          <Warning sx={{ fontSize: 64, color: theme.palette.error.main, mb: 2, opacity: 0.8 }} />
+          <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('No active batch available')}
           </Typography>
-          <Typography sx={{ color: '#6b7280', fontSize: '0.88rem', mt: 1 }}>
-            Veuillez créer un lot dans la section "Lots" avant d'enregistrer des interventions
+          <Typography sx={{ color: 'text.secondary', mt: 1 }}>
+            {t('Create batch first')}
           </Typography>
         </Paper>
       )}
@@ -537,169 +476,103 @@ export default function Interventions() {
       <Dialog 
         open={open} 
         onClose={() => setOpen(false)} 
-        maxWidth="md" 
+        maxWidth="sm" 
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }
+          className: 'glass-card',
+          sx: { borderRadius: '24px', p: 1 }
         }}
       >
-        <DialogTitle sx={{
-          fontWeight: 800, fontSize: '1.1rem',
-          color: GREEN_DARK, pb: 0,
-          borderBottom: `1px solid ${GREEN_SOFT}`,
-          mb: 1,
-        }}>
-          {editing ? '✏️ Modifier l\'intervention' : '🏥 Nouvelle intervention'}
+        <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
+          {editing ? t('Edit') + ' ' + t('Intervention') : t('New Intervention')}
         </DialogTitle>
         
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent>
           <FormControl fullWidth margin="normal">
-            <InputLabel sx={{ '&.Mui-focused': { color: GREEN_MAIN } }}>Type d'intervention</InputLabel>
+            <InputLabel>{t('Intervention Type')}</InputLabel>
             <Select
               value={formData.type}
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-              label="Type d'intervention"
-              sx={{
-                borderRadius: '10px',
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: GREEN_MAIN },
-              }}
+              label={t('Intervention Type')}
             >
               {typesIntervention.map((type) => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
+                <MenuItem key={type} value={type}>{t(type)}</MenuItem>
               ))}
             </Select>
           </FormControl>
           
           <TextField
             fullWidth 
-            label="Date" 
+            label={t('Date')} 
             type="date" 
             margin="normal"
             value={formData.date} 
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
             InputLabelProps={{ shrink: true }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           />
           
           <TextField
             fullWidth 
-            label="Description" 
+            label={t('Description')} 
             margin="normal" 
             multiline 
-            rows={2}
+            rows={3}
             value={formData.description} 
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            placeholder="Description détaillée de l'intervention..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Intervention description placeholder')}
           />
+          
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth 
+                label={t('Responsible')} 
+                margin="normal"
+                value={formData.responsable} 
+                onChange={(e) => setFormData({ ...formData, responsable: e.target.value })}
+                placeholder={t('Responsible placeholder')}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth 
+                label={t('Duration')} 
+                margin="normal"
+                value={formData.duree} 
+                onChange={(e) => setFormData({ ...formData, duree: e.target.value })}
+                placeholder={t('Duration placeholder')}
+              />
+            </Grid>
+          </Grid>
           
           <TextField
             fullWidth 
-            label="Responsable" 
-            margin="normal"
-            value={formData.responsable} 
-            onChange={(e) => setFormData({ ...formData, responsable: e.target.value })}
-            placeholder="Nom du responsable"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
-          />
-          
-          <TextField
-            fullWidth 
-            label="Produits utilisés" 
+            label={t('Products used')} 
             margin="normal"
             value={formData.produits} 
             onChange={(e) => setFormData({ ...formData, produits: e.target.value })}
-            placeholder="Médicaments, vaccins, produits..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Products placeholder')}
           />
           
           <TextField
             fullWidth 
-            label="Durée" 
-            margin="normal"
-            value={formData.duree} 
-            onChange={(e) => setFormData({ ...formData, duree: e.target.value })}
-            placeholder="Ex: 2 heures, 3 jours..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
-          />
-          
-          <TextField
-            fullWidth 
-            label="Commentaires" 
+            label={t('Comments')} 
             margin="normal" 
             multiline 
             rows={2}
             value={formData.commentaires} 
             onChange={(e) => setFormData({ ...formData, commentaires: e.target.value })}
-            placeholder="Informations complémentaires..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Comments placeholder')}
           />
         </DialogContent>
         
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button
-            onClick={() => setOpen(false)}
-            sx={{
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
-              color: '#6b7280', border: '1px solid #e5e7eb',
-              '&:hover': { background: '#f9fafb' },
-            }}
-          >
-            Annuler
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={() => setOpen(false)} sx={{ color: 'text.secondary' }}>
+            {t('Cancel')}
           </Button>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            sx={{
-              background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-              borderRadius: '10px', textTransform: 'none', fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(20,83,45,0.3)',
-              '&:hover': {
-                background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-              },
-            }}
-          >
-            Enregistrer
+          <Button variant="contained" onClick={handleSave}>
+            {t('Save')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -708,96 +581,85 @@ export default function Interventions() {
       <Dialog 
         open={viewOpen} 
         onClose={() => setViewOpen(false)} 
-        maxWidth="md" 
+        maxWidth="sm" 
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }
+          className: 'glass-card',
+          sx: { borderRadius: '24px', p: 1 }
         }}
       >
-        <DialogTitle sx={{
-          fontWeight: 800, fontSize: '1.1rem',
-          color: GREEN_DARK, pb: 0,
-          borderBottom: `1px solid ${GREEN_SOFT}`,
-          mb: 1,
-        }}>
-          Détail de l'intervention
+        <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
+          {t('Intervention Detail')}
         </DialogTitle>
         
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent>
           {selectedIntervention && (
-            <Box sx={{ mt: 1 }}>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Type
+            <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 1, display: 'block' }}>
+                  {t('Type')}
                 </Typography>
-                <Chip label={selectedIntervention.type} color={getTypeColor(selectedIntervention.type)} size="small" />
+                <Chip label={t(selectedIntervention.type)} color={getTypeColor(selectedIntervention.type)} size="small" sx={{ fontWeight: 800 }} />
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Date
+              <Grid container spacing={3}>
+                <Grid item xs={6}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                    {t('Date')}
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>{selectedIntervention.date?.toDate?.().toLocaleDateString() || selectedIntervention.date}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                    {t('Responsible')}
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>{selectedIntervention.responsable || '-'}</Typography>
+                </Grid>
+              </Grid>
+              
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                  {t('Description')}
                 </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedIntervention.date?.toDate?.().toLocaleDateString('fr-FR')}</Typography>
+                <Typography sx={{ color: 'text.primary' }}>{selectedIntervention.description || '-'}</Typography>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Description
-                </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedIntervention.description || '-'}</Typography>
-              </Box>
+              <Grid container spacing={3}>
+                <Grid item xs={6}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                    {t('Products used')}
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>{selectedIntervention.produits || '-'}</Typography>
+                </Grid>
+                <Grid item xs={6}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                    {t('Duration')}
+                  </Typography>
+                  <Typography sx={{ fontWeight: 700 }}>{selectedIntervention.duree || '-'}</Typography>
+                </Grid>
+              </Grid>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Responsable
-                </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedIntervention.responsable || '-'}</Typography>
-              </Box>
+              {selectedIntervention.commentaires && (
+                <Box sx={{ p: 2, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                    {t('Comments')}
+                  </Typography>
+                  <Typography variant="body2">{selectedIntervention.commentaires}</Typography>
+                </Box>
+              )}
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Produits utilisés
-                </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedIntervention.produits || '-'}</Typography>
-              </Box>
-              
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Durée
-                </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedIntervention.duree || '-'}</Typography>
-              </Box>
-              
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Commentaires
-                </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedIntervention.commentaires || '-'}</Typography>
-              </Box>
-              
-              <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${GREEN_SOFT}` }}>
-                <Typography variant="caption" sx={{ color: '#9ca3af' }}>
-                  Créé par: {selectedIntervention.createdByName || 'Inconnu'}
+              <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                  {t('Created by')}: {selectedIntervention.createdByName || 'Inconnu'}
                 </Typography>
               </Box>
             </Box>
           )}
         </DialogContent>
         
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button
-            onClick={() => setViewOpen(false)}
-            sx={{
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
-              background: GREEN_GHOST,
-              color: GREEN_DARK,
-              '&:hover': { background: GREEN_SOFT },
-            }}
-          >
-            Fermer
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewOpen(false)} fullWidth sx={{ borderRadius: '12px' }}>
+            {t('Close')}
           </Button>
         </DialogActions>
       </Dialog>

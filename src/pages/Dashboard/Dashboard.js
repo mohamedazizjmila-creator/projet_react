@@ -1,33 +1,40 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Grid, Paper, Typography, Box, Button, Alert, LinearProgress, Divider, Chip,
-  useTheme, Avatar
+  Grid, Paper, Typography, Box, Button, Alert, Chip,
+  useTheme
 } from '@mui/material';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, AreaChart, Area
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer
 } from 'recharts';
-import { motion, useSpring, useTransform, animate } from 'framer-motion';
+import { motion, animate } from 'framer-motion';
 import { 
   TrendingUp, TrendingDown, Thermostat, WaterDrop, Science, Co2, 
   Agriculture, Info, Warning, Error as ErrorIcon, Refresh
 } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { getLots } from '../../services/firestore';
 import { initDatabase } from '../../initDatabase';
+import { useSettings } from '../../contexts/SettingsContext';
 
 // ── Animated Counter Component ──
 function AnimatedNumber({ value }) {
   const [displayValue, setDisplayValue] = useState(0);
+  const { settings } = useSettings();
 
   useEffect(() => {
+    if (!settings.animations) {
+      setDisplayValue(value);
+      return;
+    }
     const controls = animate(0, value, {
       duration: 2,
       onUpdate: (latest) => setDisplayValue(Math.floor(latest)),
     });
     return () => controls.stop();
-  }, [value]);
+  }, [value, settings.animations]);
 
-  return <span>{displayValue.toLocaleString('fr-FR')}</span>;
+  return <span>{displayValue.toLocaleString()}</span>;
 }
 
 // ── Mini Sparkline for Stat Cards ──
@@ -50,6 +57,9 @@ function MiniSparkline({ data, color }) {
 
 // ── Hero Stat Card ──
 function HeroStatCard({ title, value, unit, trend, trendValue, icon, color, data }) {
+  const { settings } = useSettings();
+  const { t } = useTranslation();
+  
   return (
     <Paper className="glass-card" sx={{
       p: 3,
@@ -58,10 +68,10 @@ function HeroStatCard({ title, value, unit, trend, trendValue, icon, color, data
       borderRadius: '24px',
       position: 'relative',
       overflow: 'hidden',
-      transition: 'all 0.3s ease',
+      transition: settings.animations ? 'all 0.3s ease' : 'none',
       '&:hover': {
-        transform: 'translateY(-5px)',
-        boxShadow: `0 12px 24px rgba(0,0,0,0.4)`,
+        transform: settings.animations ? 'translateY(-5px)' : 'none',
+        boxShadow: `0 12px 24px rgba(0,0,0,0.2)`,
         borderColor: color,
       }
     }}>
@@ -74,11 +84,11 @@ function HeroStatCard({ title, value, unit, trend, trendValue, icon, color, data
         }}>
           {icon}
         </Box>
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography variant="caption" sx={{ color: '#94a3b8', fontWeight: 700, letterSpacing: '0.05em' }}>
+        <Box sx={{ textAlign: settings.language === 'ar' ? 'left' : 'right' }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: '0.05em' }}>
             {title}
           </Typography>
-          <Typography variant="h4" sx={{ fontWeight: 800, color: '#fff', mt: 0.5 }}>
+          <Typography variant="h4" sx={{ fontWeight: 800, color: 'text.primary', mt: 0.5 }}>
             <AnimatedNumber value={value} />{unit}
           </Typography>
         </Box>
@@ -89,8 +99,8 @@ function HeroStatCard({ title, value, unit, trend, trendValue, icon, color, data
         <Typography variant="caption" sx={{ color: trend === 'up' ? '#a3e635' : '#f87171', fontWeight: 700 }}>
           {trendValue}%
         </Typography>
-        <Typography variant="caption" sx={{ color: '#475569' }}>
-          vs semaine dernière
+        <Typography variant="caption" sx={{ color: 'text.secondary', opacity: 0.7 }}>
+          {t('vs last week')}
         </Typography>
       </Box>
 
@@ -101,6 +111,7 @@ function HeroStatCard({ title, value, unit, trend, trendValue, icon, color, data
 
 // ── IoT Sensor Card ──
 function SensorCard({ icon, label, value, unit, status, color }) {
+  const { t } = useTranslation();
   return (
     <Paper className="glass-card" sx={{
       p: 2.5,
@@ -111,10 +122,10 @@ function SensorCard({ icon, label, value, unit, status, color }) {
       <Box sx={{ mb: 1, color: color }}>
         {icon}
       </Box>
-      <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+      <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
         {label}
       </Typography>
-      <Typography variant="h5" sx={{ fontWeight: 800, color: '#fff', my: 1 }}>
+      <Typography variant="h5" sx={{ fontWeight: 800, color: 'text.primary', my: 1 }}>
         {value}<span style={{ fontSize: '0.9rem', color: '#64748b', marginLeft: '4px' }}>{unit}</span>
       </Typography>
       <Box sx={{
@@ -124,11 +135,11 @@ function SensorCard({ icon, label, value, unit, status, color }) {
         px: 1.5,
         py: 0.5,
         borderRadius: '20px',
-        background: `rgba(${color === '#a3e635' ? '163, 230, 53' : '#ef4444' === color ? '239, 68, 68' : '251, 191, 36'}, 0.05)`,
+        background: `${color}10`,
       }}>
         <div className={`dot-glow ${status === 'ok' ? 'dot-success' : status === 'warn' ? 'dot-warning' : 'dot-error'}`} />
         <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: color }}>
-          {status === 'ok' ? 'NORMAL' : status === 'warn' ? 'ATTENTION' : 'DANGER'}
+          {status === 'ok' ? t('Normal') : status === 'warn' ? t('Attention') : t('Danger')}
         </Typography>
       </Box>
     </Paper>
@@ -136,7 +147,9 @@ function SensorCard({ icon, label, value, unit, status, color }) {
 }
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const theme = useTheme();
+  const { settings } = useSettings();
   const [stats, setStats] = useState({
     lotsActifs: 12,
     volailles: 8450,
@@ -191,13 +204,13 @@ export default function Dashboard() {
   return (
     <Box sx={{ maxWidth: 1600, mx: 'auto' }}>
       {/* ── Page Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#fff', fontWeight: 800 }}>
-            Tableau de bord
+          <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('Dashboard')}
           </Typography>
-          <Typography sx={{ color: '#64748b', mt: 0.5 }}>
-            Surveillance en temps réel de votre exploitation SOTAVI
+          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {t('Real-time monitoring')}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
@@ -205,16 +218,16 @@ export default function Dashboard() {
             variant="outlined"
             startIcon={<Refresh />}
             onClick={loadDashboard}
-            sx={{ borderColor: 'rgba(148, 163, 184, 0.1)', color: '#94a3b8' }}
+            sx={{ borderColor: theme.palette.divider, color: 'text.secondary' }}
           >
-            Actualiser
+            {t('Refresh')}
           </Button>
           <Button
             variant="contained"
             onClick={handleInitDB}
             sx={{ px: 3 }}
           >
-            Initialiser la base
+            {t('Initialize DB')}
           </Button>
         </Box>
       </Box>
@@ -222,10 +235,10 @@ export default function Dashboard() {
       {initMessage && <Alert severity="success" sx={{ mb: 4, borderRadius: '16px' }}>{initMessage}</Alert>}
 
       {/* ── Hero Stats ── */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={settings.compactMode ? 2 : 3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} lg={3}>
           <HeroStatCard 
-            title="LOTS ACTIFS" 
+            title={t('Active Lots')} 
             value={stats.lotsActifs} 
             unit="" 
             trend="up" 
@@ -237,7 +250,7 @@ export default function Dashboard() {
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <HeroStatCard 
-            title="VOLAILLES TOTALES" 
+            title={t('Total Poultry')} 
             value={stats.volailles} 
             unit="" 
             trend="up" 
@@ -249,7 +262,7 @@ export default function Dashboard() {
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <HeroStatCard 
-            title="TAUX DE SURVIE" 
+            title={t('Survival Rate')} 
             value={stats.tauxSurvie} 
             unit="%" 
             trend="up" 
@@ -261,7 +274,7 @@ export default function Dashboard() {
         </Grid>
         <Grid item xs={12} sm={6} lg={3}>
           <HeroStatCard 
-            title="CONSOMMATION (KG)" 
+            title={t('Consumption')} 
             value={stats.consommation} 
             unit="" 
             trend="down" 
@@ -273,15 +286,15 @@ export default function Dashboard() {
         </Grid>
       </Grid>
 
-      <Grid container spacing={3}>
+      <Grid container spacing={settings.compactMode ? 2 : 3}>
         {/* ── Main Chart ── */}
         <Grid item xs={12} lg={8}>
           <Paper className="glass-card" sx={{ p: 4, borderRadius: '24px' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-              <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700 }}>
-                Performance de Production
+              <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 700 }}>
+                {t('Production Performance')}
               </Typography>
-              <Chip label="7 DERNIERS JOURS" size="small" sx={{ bgcolor: 'rgba(163, 230, 53, 0.1)', color: '#a3e635', fontWeight: 700 }} />
+              <Chip label={t('Last 7 Days')} size="small" sx={{ bgcolor: 'rgba(163, 230, 53, 0.1)', color: '#a3e635', fontWeight: 700 }} />
             </Box>
             <ResponsiveContainer width="100%" height={350}>
               <AreaChart data={productionData}>
@@ -291,12 +304,12 @@ export default function Dashboard() {
                     <stop offset="95%" stopColor="#a3e635" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.05)" vertical={false} />
-                <XAxis dataKey="jour" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} vertical={false} />
+                <XAxis dataKey="jour" axisLine={false} tickLine={false} tick={{ fill: theme.palette.text.secondary, fontSize: 12 }} dy={10} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: theme.palette.text.secondary, fontSize: 12 }} orientation={settings.language === 'ar' ? 'right' : 'left'} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid rgba(148, 163, 184, 0.1)', borderRadius: '12px' }}
-                  itemStyle={{ color: '#fff' }}
+                  contentStyle={{ backgroundColor: theme.palette.background.paper, border: `1px solid ${theme.palette.divider}`, borderRadius: '12px' }}
+                  itemStyle={{ color: theme.palette.text.primary }}
                 />
                 <Area type="monotone" dataKey="production" stroke="#a3e635" strokeWidth={3} fillOpacity={1} fill="url(#colorProd)" />
               </AreaChart>
@@ -306,15 +319,15 @@ export default function Dashboard() {
 
         {/* ── Sensors & Alerts ── */}
         <Grid item xs={12} lg={4}>
-          <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 700, letterSpacing: '0.1em', mb: 2, display: 'block' }}>
-            CAPTEURS IOT (BÂTIMENT A)
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, letterSpacing: '0.1em', mb: 2, display: 'block' }}>
+            {t('IoT Sensors')}
           </Typography>
-          <Grid container spacing={2} sx={{ mb: 4 }}>
+          <Grid container spacing={settings.compactMode ? 1 : 2} sx={{ mb: 4 }}>
             <Grid item xs={6}>
-              <SensorCard icon={<Thermostat />} label="TEMP." value={stats.temperature} unit="°C" status="ok" color="#a3e635" />
+              <SensorCard icon={<Thermostat />} label={t('Temperature')} value={stats.temperature} unit="°C" status="ok" color="#a3e635" />
             </Grid>
             <Grid item xs={6}>
-              <SensorCard icon={<WaterDrop />} label="HUMIDITÉ" value={stats.humidite} unit="%" status="warn" color="#fbbf24" />
+              <SensorCard icon={<WaterDrop />} label={t('Humidity')} value={stats.humidite} unit="%" status="warn" color="#fbbf24" />
             </Grid>
             <Grid item xs={6}>
               <SensorCard icon={<Science />} label="NH₃" value={stats.nh3} unit="ppm" status="ok" color="#a3e635" />
@@ -325,12 +338,12 @@ export default function Dashboard() {
           </Grid>
 
           <Paper className="glass-card" sx={{ p: 3, borderRadius: '24px' }}>
-            <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700, mb: 3 }}>
-              Alertes Récentes
+            <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 700, mb: 3 }}>
+              {t('Recent Alerts')}
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {alerts.map(alert => (
-                <Box key={alert.id} sx={{ display: 'flex', gap: 2, p: 2, borderRadius: '16px', background: 'rgba(30, 41, 59, 0.4)' }}>
+                <Box key={alert.id} sx={{ display: 'flex', gap: 2, p: 2, borderRadius: '16px', background: `${theme.palette.background.default}80` }}>
                   <Box sx={{ 
                     p: 1, height: 'fit-content', borderRadius: '10px', 
                     bgcolor: alert.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(251, 191, 36, 0.1)',
@@ -339,8 +352,8 @@ export default function Dashboard() {
                     {alert.type === 'error' ? <ErrorIcon /> : alert.type === 'warning' ? <Warning /> : <Info />}
                   </Box>
                   <Box>
-                    <Typography variant="body2" sx={{ color: '#f8fafc', fontWeight: 600 }}>{alert.message}</Typography>
-                    <Typography variant="caption" sx={{ color: '#64748b' }}>Aujourd'hui, {alert.time}</Typography>
+                    <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>{alert.message}</Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>Aujourd'hui, {alert.time}</Typography>
                   </Box>
                 </Box>
               ))}
@@ -350,4 +363,4 @@ export default function Dashboard() {
       </Grid>
     </Box>
   );
-}
+}

@@ -2,33 +2,34 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, MenuItem, Alert, Typography,
-  Grid, Chip
+  Grid, Chip, useTheme
 } from '@mui/material';
-import { Add, Inventory, Warning, Egg } from '@mui/icons-material';
+import { Add, Inventory, Warning } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 import { getLots, addProduction, getProduction, getStocks, updateStock, getBatiments } from '../../services/firestore';
-
-const GREEN_DARK = '#14532d';
-const GREEN_MID = '#166534';
-const GREEN_MAIN = '#16a34a';
-const GREEN_GHOST = '#f0fdf4';
-const GREEN_SOFT = '#dcfce7';
+import { useSettings } from '../../contexts/SettingsContext';
 
 function StatCard({ value, label, icon, active }) {
+  const theme = useTheme();
   return (
     <Box sx={{
-      flex: 1, minWidth: 140, p: 2, borderRadius: '14px',
-      background: active ? `linear-gradient(135deg, ${GREEN_DARK} 0%, ${GREEN_MID} 100%)` : '#fff',
-      border: active ? 'none' : '1px solid #e5e7eb',
-      boxShadow: active ? '0 4px 18px rgba(20,83,45,0.25)' : '0 1px 4px rgba(0,0,0,0.06)',
+      flex: 1, minWidth: 140, p: 2, borderRadius: '16px',
+      background: active ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)` : theme.palette.background.paper,
+      border: `1px solid ${theme.palette.divider}`,
+      boxShadow: active ? `0 8px 20px ${theme.palette.primary.main}20` : 'none',
+      backdropFilter: 'blur(8px)',
     }}>
-      <Typography sx={{ fontSize: '1.1rem', mb: 0.5 }}>{icon}</Typography>
-      <Typography sx={{ fontSize: '1.5rem', fontWeight: 800, color: active ? '#fff' : GREEN_DARK }}>{value}</Typography>
-      <Typography sx={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', color: active ? '#86efac' : '#9ca3af', mt: 0.3 }}>{label}</Typography>
+      <Typography sx={{ fontSize: '1.2rem', mb: 0.5 }}>{icon}</Typography>
+      <Typography sx={{ fontSize: '1.5rem', fontWeight: 800, color: active ? '#fff' : 'text.primary' }}>{value}</Typography>
+      <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: active ? 'rgba(255,255,255,0.7)' : 'text.secondary', mt: 0.3, letterSpacing: '0.05em' }}>{label}</Typography>
     </Box>
   );
 }
 
 export default function Production() {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const { settings } = useSettings();
   const [lots, setLots] = useState([]);
   const [batiments, setBatiments] = useState([]);
   const [selectedLot, setSelectedLot] = useState('');
@@ -84,7 +85,7 @@ export default function Production() {
   const loadStock = async () => {
     try {
       const stocks = await getStocks();
-      const stockAliment = stocks.find(s => s.nom === "Aliment démarrage" || s.nom === "Aliment croissance" || s.nom === "Aliment ponte" || s.nom.includes("Aliment"));
+      const stockAliment = stocks.find(s => s.nom?.includes("Aliment"));
       if (stockAliment) {
         setStockActuel(stockAliment.quantite);
         setStockInfo(stockAliment);
@@ -95,29 +96,28 @@ export default function Production() {
   };
 
   const getBatimentNom = (batimentId) => {
-    if (!batimentId) return 'Non assigné';
+    if (!batimentId) return t('Inactive');
     const batiment = batiments.find(b => b.id === batimentId);
     return batiment ? batiment.nom : batimentId;
   };
 
   const isPondeuse = () => {
-    return selectedLotDetails?.typeVolailles?.toLowerCase().includes('pondeuse') ||
-           selectedLotDetails?.typeVolailles?.toLowerCase().includes('œuf') ||
-           selectedLotDetails?.typeVolailles?.toLowerCase().includes('oeuf');
+    const type = selectedLotDetails?.typeVolailles?.toLowerCase() || '';
+    return type.includes('pondeuse') || type.includes('œuf') || type.includes('oeuf') || type.includes('layer');
   };
 
   const diminuerStockAliment = async (quantiteConsommee) => {
     try {
       const stocks = await getStocks();
-      const stockAliment = stocks.find(s => s.nom === "Aliment démarrage" || s.nom === "Aliment croissance" || s.nom === "Aliment ponte" || s.nom.includes("Aliment"));
+      const stockAliment = stocks.find(s => s.nom?.includes("Aliment"));
       
       if (!stockAliment) {
-        setError("❌ Stock d'aliment non trouvé");
+        setError(t('Feed stock not found'));
         return false;
       }
       
       if (stockAliment.quantite < quantiteConsommee) {
-        setError(`❌ Stock insuffisant ! Il reste ${stockAliment.quantite} ${stockAliment.unite || 'kg'}`);
+        setError(t('Insufficient stock', { count: stockAliment.quantite, unit: stockAliment.unite || 'kg' }));
         return false;
       }
       
@@ -126,8 +126,7 @@ export default function Production() {
       setStockActuel(nouvelleQuantite);
       return true;
     } catch (err) {
-      console.error("Erreur diminution stock:", err);
-      setError("Erreur lors de la mise à jour du stock");
+      setError(t('Error saving'));
       return false;
     }
   };
@@ -138,7 +137,7 @@ export default function Production() {
     setSuccess('');
     
     if (!selectedLot) {
-      setError('Veuillez sélectionner un lot');
+      setError(t('Batch required'));
       return;
     }
     
@@ -147,17 +146,17 @@ export default function Production() {
     const productionOeufsValue = parseInt(formData.productionOeufs);
     
     if (isNaN(quantiteAliment) || quantiteAliment <= 0) {
-      setError('Quantité d\'aliment invalide');
+      setError(t('Invalid feed quantity'));
       return;
     }
     
     if (isNaN(mortaliteValue) || mortaliteValue < 0) {
-      setError('Mortalité invalide');
+      setError(t('Invalid mortality'));
       return;
     }
     
     if (isPondeuse() && (isNaN(productionOeufsValue) || productionOeufsValue < 0)) {
-      setError('Production d\'œufs invalide');
+      setError(t('Invalid egg production'));
       return;
     }
     
@@ -176,11 +175,11 @@ export default function Production() {
     
     await addProduction(selectedLot, productionData);
     
-    setSuccess(`✅ Données enregistrées - Stock restant: ${stockActuel - quantiteAliment} ${stockInfo?.unite || 'kg'}`);
+    setSuccess(t('Data recorded', { count: stockActuel - quantiteAliment, unit: stockInfo?.unite || 'kg' }));
     setFormData({ mortalite: '', consommationAliment: '', productionOeufs: '' });
     loadProductions();
     
-    setTimeout(() => setSuccess(''), 3000);
+    setTimeout(() => setSuccess(''), 4000);
   };
 
   const joursElevage = selectedLotDetails?.dateArrivee?.toDate 
@@ -190,108 +189,154 @@ export default function Production() {
   const isStockFaible = stockActuel < 200;
 
   return (
-    <Box sx={{ maxWidth: 1100 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
-          <Typography sx={{ fontSize: '1.9rem', fontWeight: 800, color: GREEN_DARK }}>Suivi de Production</Typography>
-          <Typography sx={{ fontSize: '0.88rem', color: '#6b7280', mt: 0.3 }}>Enregistrez la mortalité, la consommation alimentaire et les œufs</Typography>
+          <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>{t('Production Tracking')}</Typography>
+          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>{t('Production Subtitle')}</Typography>
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 0.8, borderRadius: '10px', background: isStockFaible ? '#fffbeb' : GREEN_GHOST, border: `1px solid ${isStockFaible ? '#fde68a' : GREEN_SOFT}` }}>
-          <Inventory sx={{ color: isStockFaible ? '#f59e0b' : GREEN_MAIN, fontSize: 20 }} />
+        <Box sx={{ 
+          display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5, 
+          borderRadius: '16px', 
+          bgcolor: isStockFaible ? 'rgba(251, 191, 36, 0.1)' : 'rgba(163, 230, 53, 0.1)',
+          border: `1px solid ${isStockFaible ? '#fbbf24' : '#a3e635'}40`
+        }}>
+          <Inventory sx={{ color: isStockFaible ? '#fbbf24' : '#a3e635' }} />
           <Box>
-            <Typography sx={{ fontSize: '0.65rem', color: '#6b7280' }}>Stock aliment</Typography>
-            <Typography sx={{ fontWeight: 800, fontSize: '1rem', color: isStockFaible ? '#f59e0b' : GREEN_DARK }}>
+            <Typography sx={{ fontSize: '0.7rem', color: 'text.secondary', fontWeight: 700, textTransform: 'uppercase' }}>{t('Feed Stock')}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary', lineHeight: 1 }}>
               {stockActuel} {stockInfo?.unite || 'kg'}
             </Typography>
           </Box>
-          {isStockFaible && <Warning sx={{ color: '#f59e0b', fontSize: 18 }} />}
+          {isStockFaible && <Warning sx={{ color: '#fbbf24' }} />}
         </Box>
       </Box>
 
-      {success && <Alert severity="success" sx={{ mb: 2, borderRadius: '10px' }}>{success}</Alert>}
+      {success && <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>{success}</Alert>}
 
-      <Paper sx={{ p: 3, mb: 3, borderRadius: '16px', border: '1px solid #e5e7eb', boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
-        <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', mb: 2 }}>Sélection du lot</Typography>
-        <TextField select fullWidth label="Lot actif" value={selectedLot} onChange={(e) => setSelectedLot(e.target.value)} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px', '&.Mui-focused fieldset': { borderColor: GREEN_MAIN } } }}>
-          {lots.length === 0 ? (<MenuItem disabled>Aucun lot actif</MenuItem>) : (lots.map((l) => (<MenuItem key={l.id} value={l.id}>Lot du {l.dateArrivee?.toDate?.().toLocaleDateString('fr-FR') || 'N/A'} - Bâtiment: {getBatimentNom(l.batimentId)} - {l.nbInitial} sujets {l.typeVolailles && `(${l.typeVolailles})`}</MenuItem>)))}
+      <Paper className="glass-card" sx={{ p: 3, mb: 4, borderRadius: '24px' }}>
+        <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 2, display: 'block', letterSpacing: '0.1em' }}>{t('Select Batch')}</Typography>
+        <TextField 
+          select fullWidth 
+          label={t('Active Batch')} 
+          value={selectedLot} 
+          onChange={(e) => setSelectedLot(e.target.value)}
+        >
+          {lots.length === 0 ? (
+            <MenuItem disabled>{t('No active batch')}</MenuItem>
+          ) : (
+            lots.map((l) => (
+              <MenuItem key={l.id} value={l.id}>
+                {t('Batch info', { 
+                  date: l.dateArrivee?.toDate?.().toLocaleDateString() || l.dateArrivee || 'N/A',
+                  batiment: getBatimentNom(l.batimentId),
+                  count: l.nbInitial,
+                  type: l.typeVolailles ? `(${l.typeVolailles})` : ''
+                })}
+              </MenuItem>
+            ))
+          )}
         </TextField>
       </Paper>
 
       {selectedLot && selectedLotDetails && (
         <>
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} md={6}>
-              <Paper sx={{ p: 2.5, borderRadius: '16px', border: '1px solid #e5e7eb', background: GREEN_GHOST }}>
-                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', mb: 1.5 }}>INFORMATIONS DU LOT</Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography sx={{ color: '#6b7280', fontSize: '0.85rem' }}>Bâtiment:</Typography><Typography sx={{ fontWeight: 600, color: GREEN_DARK }}>{getBatimentNom(selectedLotDetails.batimentId)}</Typography></Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography sx={{ color: '#6b7280', fontSize: '0.85rem' }}>Nombre initial:</Typography><Typography sx={{ fontWeight: 600, color: GREEN_DARK }}>{selectedLotDetails.nbInitial} sujets</Typography></Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography sx={{ color: '#6b7280', fontSize: '0.85rem' }}>Type de volailles:</Typography><Typography sx={{ fontWeight: 600, color: GREEN_DARK }}>{selectedLotDetails.typeVolailles || 'Standard'}</Typography></Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography sx={{ color: '#6b7280', fontSize: '0.85rem' }}>Date d'arrivée:</Typography><Typography sx={{ fontWeight: 600, color: GREEN_DARK }}>{selectedLotDetails.dateArrivee?.toDate?.().toLocaleDateString('fr-FR') || 'N/A'}</Typography></Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}><Typography sx={{ color: '#6b7280', fontSize: '0.85rem' }}>Jours d'élevage:</Typography><Chip label={`${joursElevage} jours`} size="small" sx={{ background: GREEN_SOFT, color: GREEN_DARK, fontWeight: 600 }} /></Box>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={12} lg={5}>
+              <Paper className="glass-card" sx={{ p: 3, borderRadius: '24px', height: '100%', bgcolor: 'rgba(163, 230, 53, 0.03)' }}>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mb: 2, display: 'block', letterSpacing: '0.1em' }}>{t('BATCH INFORMATION')}</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>{t('Building')}:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{getBatimentNom(selectedLotDetails.batimentId)}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>{t('Initial Number')}:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{selectedLotDetails.nbInitial} {t('subjects')}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>{t('TYPE')}:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{selectedLotDetails.typeVolailles || t('Standard')}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>{t('Arrival Date')}:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{selectedLotDetails.dateArrivee?.toDate?.().toLocaleDateString() || selectedLotDetails.dateArrivee || 'N/A'}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.9rem' }}>{t('Breeding Days')}:</Typography>
+                    <Chip label={t('count_days', { count: joursElevage })} size="small" sx={{ bgcolor: 'rgba(163, 230, 53, 0.1)', color: '#a3e635', fontWeight: 800 }} />
+                  </Box>
                 </Box>
               </Paper>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <Box sx={{ display: 'flex', gap: 2, height: '100%' }}>
-                <StatCard value={totalMortalite} label="Mortalité totale" icon="📉" active={false} />
-                <StatCard value={`${totalConsommation} kg`} label="Aliment consommé" icon="🌾" active={false} />
-                {isPondeuse() && <StatCard value={totalOeufs} label="🥚 Œufs produits" icon="🥚" active={false} />}
+            <Grid item xs={12} lg={7}>
+              <Box sx={{ display: 'flex', gap: 2, height: '100%', flexDirection: { xs: 'column', sm: 'row' } }}>
+                <StatCard value={totalMortalite} label={t('Total Mortality')} icon="📉" active={false} />
+                <StatCard value={`${totalConsommation} kg`} label={t('Feed Consumed')} icon="🌾" active={false} />
+                {isPondeuse() && <StatCard value={totalOeufs} label={t('Eggs Produced')} icon="🥚" active={false} />}
               </Box>
             </Grid>
           </Grid>
 
-          <Paper sx={{ p: 3, mb: 3, borderRadius: '16px', border: '1px solid #e5e7eb' }}>
-            <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', mb: 2 }}>Enregistrement quotidien</Typography>
-            {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>{error}</Alert>}
+          <Paper className="glass-card" sx={{ p: 4, mb: 4, borderRadius: '24px' }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary', mb: 3 }}>{t('Daily Recording')}</Typography>
+            {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>{error}</Alert>}
             <form onSubmit={handleSubmit}>
-              <Grid container spacing={2}>
+              <Grid container spacing={3}>
                 <Grid item xs={12} sm={isPondeuse() ? 4 : 6}>
-                  <TextField fullWidth label="Mortalité du jour" type="number" value={formData.mortalite} onChange={(e) => setFormData({ ...formData, mortalite: e.target.value })} required InputProps={{ inputProps: { min: 0 } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+                  <TextField fullWidth label={t('Mortality of the day')} type="number" value={formData.mortalite} onChange={(e) => setFormData({ ...formData, mortalite: e.target.value })} required />
                 </Grid>
                 <Grid item xs={12} sm={isPondeuse() ? 4 : 6}>
-                  <TextField fullWidth label="Consommation alimentaire (kg)" type="number" value={formData.consommationAliment} onChange={(e) => setFormData({ ...formData, consommationAliment: e.target.value })} required InputProps={{ inputProps: { min: 0 } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+                  <TextField fullWidth label={t('Feed consumption (kg)')} type="number" value={formData.consommationAliment} onChange={(e) => setFormData({ ...formData, consommationAliment: e.target.value })} required />
                 </Grid>
                 {isPondeuse() && (
                   <Grid item xs={12} sm={4}>
-                    <TextField fullWidth label="🥚 Production d'œufs" type="number" value={formData.productionOeufs} onChange={(e) => setFormData({ ...formData, productionOeufs: e.target.value })} required InputProps={{ inputProps: { min: 0 } }} sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} helperText="Nombre d'œufs pondus aujourd'hui" />
+                    <TextField fullWidth label={t('Egg production')} type="number" value={formData.productionOeufs} onChange={(e) => setFormData({ ...formData, productionOeufs: e.target.value })} required helperText={t('Egg production helper')} />
                   </Grid>
                 )}
               </Grid>
-              <Button type="submit" variant="contained" startIcon={<Add />} sx={{ mt: 3, background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`, borderRadius: '10px', textTransform: 'none', fontWeight: 700, px: 3, py: 1 }}>Enregistrer les données</Button>
+              <Button type="submit" variant="contained" size="large" sx={{ mt: 4, px: 4, py: 1.5, borderRadius: '14px', fontWeight: 800 }}>{t('Save Data')}</Button>
             </form>
           </Paper>
 
           {productions.length > 0 && (
-            <Paper sx={{ borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-              <Box sx={{ p: 2.5, borderBottom: `1px solid ${GREEN_SOFT}` }}><Typography sx={{ fontWeight: 700, color: GREEN_DARK }}>📊 Historique des enregistrements</Typography></Box>
-              <TableContainer>
-                <Table>
-                  <TableHead><TableRow sx={{ background: GREEN_GHOST }}>
-                    <TableCell sx={{ fontWeight: 700, color: GREEN_DARK }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: GREEN_DARK }} align="center">Mortalité</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: GREEN_DARK }} align="center">Consommation (kg)</TableCell>
-                    {isPondeuse() && <TableCell sx={{ fontWeight: 700, color: GREEN_DARK }} align="center">🥚 Œufs</TableCell>}
-                  </TableRow></TableHead>
-                  <TableBody>
-                    {productions.map((p, idx) => (
-                      <TableRow key={p.id} sx={{ background: idx % 2 === 0 ? '#fff' : '#fafafa' }}>
-                        <TableCell>{p.date?.toDate?.().toLocaleDateString('fr-FR')}</TableCell>
-                        <TableCell align="center"><Chip label={p.mortalite} size="small" sx={{ background: p.mortalite > 0 ? '#fef2f2' : GREEN_SOFT, color: p.mortalite > 0 ? '#dc2626' : GREEN_DARK, fontWeight: 600 }} /></TableCell>
-                        <TableCell align="center"><Typography sx={{ fontWeight: 600 }}>{p.consommationAliment} kg</Typography></TableCell>
-                        {isPondeuse() && <TableCell align="center"><Typography sx={{ fontWeight: 600 }}>{p.productionOeufs || '-'}</Typography></TableCell>}
-                      </TableRow>
-                    ))}
-                    <TableRow sx={{ background: GREEN_GHOST }}>
-                      <TableCell sx={{ fontWeight: 700, color: GREEN_DARK }}>TOTAL</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 700, color: GREEN_DARK }}>{totalMortalite}</TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 700, color: GREEN_DARK }}>{totalConsommation} kg</TableCell>
-                      {isPondeuse() && <TableCell align="center" sx={{ fontWeight: 700, color: GREEN_DARK }}>{totalOeufs}</TableCell>}
+            <TableContainer component={Paper} className="glass-card" sx={{ borderRadius: '24px', overflow: 'hidden' }}>
+              <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary' }}>{t('Recording History')}</Typography>
+              </Box>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>{t('Date')}</TableCell>
+                    <TableCell align="center">{t('Total Mortality')}</TableCell>
+                    <TableCell align="center">{t('Feed Consumed')}</TableCell>
+                    {isPondeuse() && <TableCell align="center">{t('Eggs Produced')}</TableCell>}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {productions.map((p, idx) => (
+                    <TableRow key={p.id}>
+                      <TableCell sx={{ color: 'text.secondary' }}>{p.date?.toDate?.().toLocaleDateString() || p.date}</TableCell>
+                      <TableCell align="center">
+                        <Chip label={p.mortalite} size="small" sx={{ 
+                          bgcolor: p.mortalite > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(163, 230, 53, 0.1)', 
+                          color: p.mortalite > 0 ? '#f87171' : '#a3e635', 
+                          fontWeight: 800 
+                        }} />
+                      </TableCell>
+                      <TableCell align="center"><Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{p.consommationAliment} kg</Typography></TableCell>
+                      {isPondeuse() && <TableCell align="center"><Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{p.productionOeufs || '-'}</Typography></TableCell>}
                     </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
+                  ))}
+                  <TableRow sx={{ bgcolor: 'rgba(163, 230, 53, 0.05)' }}>
+                    <TableCell sx={{ fontWeight: 800, color: 'text.primary' }}>{t('TOTAL')}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 800, color: 'text.primary' }}>{totalMortalite}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 800, color: 'text.primary' }}>{totalConsommation} kg</TableCell>
+                    {isPondeuse() && <TableCell align="center" sx={{ fontWeight: 800, color: 'text.primary' }}>{totalOeufs}</TableCell>}
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </TableContainer>
           )}
         </>
       )}

@@ -1,9 +1,10 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { theme } from './theme/theme';
+import { SettingsProvider } from './contexts/SettingsContext';
+import { CustomThemeProvider } from './components/Theme/CustomThemeProvider';
+import './i18n/i18n'; // Initialize i18n
 import Login from './pages/Auth/Login';
 import Sidebar from './components/Layout/Sidebar';
 import Dashboard from './pages/Dashboard/Dashboard';
@@ -106,15 +107,17 @@ function AppRoutes() {
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <BrowserRouter>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </BrowserRouter>
-    </ThemeProvider>
+    <SettingsProvider>
+      <CustomThemeProvider>
+        <CssBaseline />
+        <BrowserRouter>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </BrowserRouter>
+      </CustomThemeProvider>
+    </SettingsProvider>
   );
 }
 
-export default App;
+export default App;

@@ -1,29 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Button, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, IconButton, Dialog, DialogTitle, DialogContent,
-  TextField, DialogActions, Alert, Chip, MenuItem, FormControl,
-  InputLabel, Select, Typography, Tooltip, Grid
+  TextField, DialogActions, Alert, Chip, MenuItem, Typography, Tooltip, Grid, useTheme
 } from '@mui/material';
 import { Add, Edit, Delete, Refresh, Visibility, MedicalServices, Warning } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useSettings } from '../../contexts/SettingsContext';
 import { getLots, getBatiments, getSanteRecords, addSanteRecord, updateSanteRecord, deleteSanteRecord } from '../../services/firestore';
 
-// ── palette ───────────────────────────────────────────────────────────────────
-const GREEN_DARK  = '#14532d';
-const GREEN_MID   = '#166534';
-const GREEN_MAIN  = '#16a34a';
-const GREEN_GHOST = '#f0fdf4';
-const GREEN_SOFT  = '#dcfce7';
-
 // ── Small chicken for decoration ─────────────────────────────────────────────
-function ChickenSmall({ size = 20, color = '#86efac' }) {
+function ChickenSmall({ size = 20, color = '#a3e635' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
       <ellipse cx="32" cy="40" rx="18" ry="14" fill={color} opacity="0.9"/>
       <circle cx="44" cy="22" r="10" fill={color} opacity="0.9"/>
       <path d="M41 13 Q43 8 45 13 Q47 7 49 13" stroke="#ef4444" strokeWidth="3" strokeLinecap="round" fill="none"/>
       <path d="M53 23 L58 21 L53 25 Z" fill="#f59e0b"/>
-      <circle cx="47" cy="21" r="2" fill={GREEN_DARK}/>
+      <circle cx="47" cy="21" r="2" fill="#0f172a"/>
       <ellipse cx="52" cy="26" rx="2.5" ry="3.5" fill="#ef4444" opacity="0.9"/>
     </svg>
   );
@@ -31,30 +26,29 @@ function ChickenSmall({ size = 20, color = '#86efac' }) {
 
 // ── Stat card component ──────────────────────────────────────────────────────
 function StatCard({ value, label, icon, active }) {
+  const theme = useTheme();
   return (
     <Box sx={{
       flex: 1, minWidth: 160,
-      p: 2, borderRadius: '14px',
+      p: 2.5, borderRadius: '20px',
       background: active
-        ? `linear-gradient(135deg, ${GREEN_DARK} 0%, ${GREEN_MID} 100%)`
-        : '#fff',
-      border: active ? 'none' : '1px solid #e5e7eb',
-      boxShadow: active
-        ? '0 4px 18px rgba(20,83,45,0.25)'
-        : '0 1px 4px rgba(0,0,0,0.06)',
+        ? `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`
+        : theme.palette.background.paper,
+      border: `1px solid ${theme.palette.divider}`,
+      boxShadow: active ? `0 8px 24px ${theme.palette.primary.main}20` : 'none',
     }}>
-      <Typography sx={{ fontSize: '1.1rem', mb: 0.5 }}>{icon}</Typography>
+      <Typography sx={{ fontSize: '1.2rem', mb: 0.5 }}>{icon}</Typography>
       <Typography sx={{
-        fontSize: '1.5rem', fontWeight: 800, lineHeight: 1.1,
-        color: active ? '#fff' : GREEN_DARK,
+        fontSize: '1.6rem', fontWeight: 800, lineHeight: 1.1,
+        color: active ? '#fff' : 'text.primary',
       }}>
         {value}
       </Typography>
       <Typography sx={{
-        fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em',
+        fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em',
         textTransform: 'uppercase',
-        color: active ? '#86efac' : '#9ca3af',
-        mt: 0.3,
+        color: active ? 'rgba(255,255,255,0.7)' : 'text.secondary',
+        mt: 0.5,
       }}>
         {label}
       </Typography>
@@ -63,6 +57,9 @@ function StatCard({ value, label, icon, active }) {
 }
 
 export default function Sante() {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const { settings } = useSettings();
   const [lots, setLots] = useState([]);
   const [batiments, setBatiments] = useState([]);
   const [selectedLot, setSelectedLot] = useState('');
@@ -88,6 +85,16 @@ export default function Sante() {
     loadBatiments();
   }, []);
 
+  const loadSanteRecords = useCallback(async () => {
+    if (!selectedLot) return;
+    try {
+      const data = await getSanteRecords(selectedLot);
+      setSanteRecords(data);
+    } catch (err) {
+      console.error("Erreur chargement santé:", err);
+    }
+  }, [selectedLot]);
+
   useEffect(() => {
     if (selectedLot) {
       loadSanteRecords();
@@ -96,7 +103,7 @@ export default function Sante() {
     } else {
       setSelectedLotDetails(null);
     }
-  }, [selectedLot, lots]);
+  }, [selectedLot, lots, loadSanteRecords]);
 
   const loadLots = async () => {
     try {
@@ -117,18 +124,9 @@ export default function Sante() {
   };
 
   const getBatimentNom = (batimentId) => {
-    if (!batimentId) return 'Non assigné';
+    if (!batimentId) return t('Inactive');
     const batiment = batiments.find(b => b.id === batimentId);
     return batiment ? batiment.nom : batimentId;
-  };
-
-  const loadSanteRecords = async () => {
-    try {
-      const data = await getSanteRecords(selectedLot);
-      setSanteRecords(data);
-    } catch (err) {
-      console.error("Erreur chargement santé:", err);
-    }
   };
 
   const handleSave = async () => {
@@ -136,7 +134,7 @@ export default function Sante() {
     setSuccess('');
     
     if (!formData.diagnostic) {
-      setError('Le diagnostic est requis');
+      setError(t('Diagnosis required'));
       return;
     }
 
@@ -148,10 +146,10 @@ export default function Sante() {
       
       if (editing) {
         await updateSanteRecord(selectedLot, editing.id, dataToSave);
-        setSuccess('Enregistrement modifié');
+        setSuccess(t('Record updated'));
       } else {
         await addSanteRecord(selectedLot, dataToSave);
-        setSuccess('Enregistrement ajouté');
+        setSuccess(t('Record added'));
       }
       
       setOpen(false);
@@ -172,10 +170,10 @@ export default function Sante() {
   };
 
   const handleDelete = async (record) => {
-    if (window.confirm('Supprimer cet enregistrement ?')) {
+    if (window.confirm(t('Delete record confirmation'))) {
       try {
         await deleteSanteRecord(selectedLot, record.id);
-        setSuccess('Enregistrement supprimé');
+        setSuccess(t('Record deleted'));
         loadSanteRecords();
         setTimeout(() => setSuccess(''), 3000);
       } catch (err) {
@@ -194,13 +192,12 @@ export default function Sante() {
 
   const getSeverityText = (diagnostic) => {
     const diag = diagnostic.toLowerCase();
-    if (diag.includes('infection') || diag.includes('maladie')) return 'Critique';
-    if (diag.includes('prévention') || diag.includes('contrôle')) return 'Préventif';
-    if (diag.includes('léger') || diag.includes('mineur')) return 'Mineur';
-    return 'Normal';
+    if (diag.includes('infection') || diag.includes('maladie')) return t('Critical');
+    if (diag.includes('prévention') || diag.includes('contrôle')) return t('Preventive');
+    if (diag.includes('léger') || diag.includes('mineur')) return t('Minor');
+    return t('Normal');
   };
 
-  // Statistiques
   const totalRecords = santeRecords.length;
   const recordsCritiques = santeRecords.filter(r => {
     const diag = r.diagnostic?.toLowerCase() || '';
@@ -208,82 +205,70 @@ export default function Sante() {
   }).length;
 
   return (
-    <Box sx={{ maxWidth: 1100 }}>
+    <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
       {/* ── Header ── */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
-          <Typography sx={{ fontSize: '1.9rem', fontWeight: 800, color: GREEN_DARK, letterSpacing: '-0.3px' }}>
-            Suivi Sanitaire
+          <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('Health Tracking')}
           </Typography>
-          <Typography sx={{ fontSize: '0.88rem', color: '#6b7280', mt: 0.3 }}>
-            Gérez les diagnostics, traitements et suivis vétérinaires par lot
+          <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>
+            {t('Health Subtitle')}
           </Typography>
         </Box>
-        <Tooltip title="Rafraîchir">
+        <Tooltip title={t('Refresh')}>
           <IconButton
             onClick={loadSanteRecords}
             sx={{
-              background: GREEN_GHOST,
-              borderRadius: '10px',
-              '&:hover': { background: GREEN_SOFT },
+              background: 'rgba(163, 230, 53, 0.1)',
+              borderRadius: '12px',
+              color: theme.palette.primary.main,
+              '&:hover': { background: 'rgba(163, 230, 53, 0.2)' },
             }}
           >
-            <Refresh sx={{ color: GREEN_MAIN }} />
+            <Refresh />
           </IconButton>
         </Tooltip>
       </Box>
 
       {success && (
-        <Alert severity="success" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>
           {success}
         </Alert>
       )}
       {error && (
-        <Alert severity="error" sx={{ mb: 2, borderRadius: '10px' }}>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>
           {error}
         </Alert>
       )}
 
       {/* ── Selection du lot ── */}
-      <Paper sx={{
-        p: 3, mb: 3,
-        borderRadius: '16px',
-        border: '1px solid #e5e7eb',
-        boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
-      }}>
-        <Typography sx={{
-          fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.12em',
-          color: '#9ca3af', textTransform: 'uppercase', mb: 2,
-        }}>
-          Sélection du lot
+      <Paper className="glass-card" sx={{ p: 3, mb: 4, borderRadius: '24px' }}>
+        <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 2, display: 'block', letterSpacing: '0.1em' }}>
+          {t('Select Batch')}
         </Typography>
         
         <TextField
           select
           fullWidth
-          label="Lot actif"
+          label={t('Active Batch')}
           value={selectedLot}
           onChange={(e) => setSelectedLot(e.target.value)}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              borderRadius: '10px',
-              '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-            },
-            '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-          }}
         >
           {lots.length === 0 ? (
-            <MenuItem disabled>Aucun lot actif</MenuItem>
+            <MenuItem disabled>{t('No active batch available')}</MenuItem>
           ) : (
             lots.map((lot) => (
               <MenuItem key={lot.id} value={lot.id}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <ChickenSmall size={16} color={GREEN_MAIN} />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <ChickenSmall size={18} color={theme.palette.primary.main} />
                   <span>
-                    Lot du {lot.dateArrivee?.toDate?.().toLocaleDateString('fr-FR') || 'N/A'} 
-                    {' - Bâtiment: '}{getBatimentNom(lot.batimentId)}
-                    {' - '}{lot.nbInitial} sujets
-                    {lot.typeVolailles && ` (${lot.typeVolailles})`}
+                    {t('Batch info', {
+                      date: lot.dateArrivee?.toDate?.().toLocaleDateString() || lot.dateArrivee || 'N/A',
+                      batiment: getBatimentNom(lot.batimentId),
+                      count: lot.nbInitial,
+                      type: lot.typeVolailles ? `(${lot.typeVolailles})` : ''
+                    })}
                   </span>
                 </Box>
               </MenuItem>
@@ -295,11 +280,11 @@ export default function Sante() {
       {selectedLot && selectedLotDetails && (
         <>
           {/* ── Cartes de statistiques ── */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} md={4}>
               <StatCard 
                 value={totalRecords} 
-                label="Total enregistrements" 
+                label={t('Total Records')} 
                 icon="📋" 
                 active={true}
               />
@@ -307,38 +292,33 @@ export default function Sante() {
             <Grid item xs={12} md={4}>
               <StatCard 
                 value={recordsCritiques} 
-                label="Cas critiques" 
+                label={t('Critical Cases')} 
                 icon="⚠️" 
                 active={false}
               />
             </Grid>
             <Grid item xs={12} md={4}>
-              <Paper sx={{
-                p: 2.5, height: '100%',
-                borderRadius: '16px',
-                border: '1px solid #e5e7eb',
-                background: GREEN_GHOST,
-              }}>
-                <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', mb: 1.5 }}>
-                  INFORMATIONS DU LOT
+              <Paper className="glass-card" sx={{ p: 2.5, height: '100%', borderRadius: '20px', bgcolor: 'rgba(163, 230, 53, 0.03)' }}>
+                <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', mb: 1, display: 'block', letterSpacing: '0.05em' }}>
+                  {t('BATCH INFORMATION')}
                 </Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography sx={{ color: '#6b7280', fontSize: '0.75rem' }}>Bâtiment:</Typography>
-                    <Typography sx={{ fontWeight: 600, color: GREEN_DARK, fontSize: '0.85rem' }}>
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>{t('Building')}:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: '0.85rem' }}>
                       {getBatimentNom(selectedLotDetails.batimentId)}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography sx={{ color: '#6b7280', fontSize: '0.75rem' }}>Type de volailles:</Typography>
-                    <Typography sx={{ fontWeight: 600, color: GREEN_DARK, fontSize: '0.85rem' }}>
-                      {selectedLotDetails.typeVolailles || 'Standard'}
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>{t('Poultry Type')}:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: '0.85rem' }}>
+                      {selectedLotDetails.typeVolailles || t('Standard')}
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <Typography sx={{ color: '#6b7280', fontSize: '0.75rem' }}>Nombre initial:</Typography>
-                    <Typography sx={{ fontWeight: 600, color: GREEN_DARK, fontSize: '0.85rem' }}>
-                      {selectedLotDetails.nbInitial} sujets
+                    <Typography sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>{t('Initial Nb')}:</Typography>
+                    <Typography sx={{ fontWeight: 700, color: 'text.primary', fontSize: '0.85rem' }}>
+                      {selectedLotDetails.nbInitial} {t('subjects')}
                     </Typography>
                   </Box>
                 </Box>
@@ -347,50 +327,36 @@ export default function Sante() {
           </Grid>
 
           {/* ── Bouton Ajouter ── */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
             <Button
               variant="contained"
               startIcon={<Add />}
               onClick={() => setOpen(true)}
-              sx={{
-                background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-                borderRadius: '10px',
-                textTransform: 'none',
-                fontWeight: 700,
-                px: 2.5, py: 1,
-                '&:hover': {
-                  background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-                },
-              }}
+              sx={{ px: 3, py: 1.2, borderRadius: '12px' }}
             >
-              Nouvel enregistrement
+              {t('New Health Record')}
             </Button>
           </Box>
 
           {/* ── Tableau des enregistrements sanitaires ── */}
-          <Paper sx={{
-            borderRadius: '16px',
-            border: '1px solid #e5e7eb',
-            boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
-            overflow: 'hidden',
-          }}>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow sx={{ background: GREEN_GHOST }}>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Date</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Diagnostic</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Traitement</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }}>Médicaments</TableCell>
-                    <TableCell sx={{ fontWeight: 700, fontSize: '0.72rem', color: GREEN_DARK }} align="center">Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
+          <TableContainer component={Paper} className="glass-card" sx={{ borderRadius: '24px', overflow: 'hidden' }}>
+            <Table stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>{t('Date')}</TableCell>
+                  <TableCell>{t('Diagnosis')}</TableCell>
+                  <TableCell>{t('Treatment')}</TableCell>
+                  <TableCell>{t('Medicines')}</TableCell>
+                  <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>{t('ACTIONS')}</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <AnimatePresence>
                   {santeRecords.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 6, color: '#9ca3af', fontSize: '0.88rem' }}>
-                        <MedicalServices sx={{ fontSize: 40, mb: 1, color: '#9ca3af' }} />
-                        <Typography>Aucun enregistrement sanitaire pour ce lot</Typography>
+                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 8 }}>
+                        <MedicalServices sx={{ fontSize: 48, mb: 2, color: 'text.secondary', opacity: 0.5 }} />
+                        <Typography sx={{ color: 'text.secondary' }}>{t('No health record')}</Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -399,14 +365,15 @@ export default function Sante() {
                       return (
                         <TableRow 
                           key={record.id} 
-                          sx={{ 
-                            '&:hover': { background: GREEN_GHOST },
-                            background: idx % 2 === 0 ? '#fff' : '#fafafa',
-                          }}
+                          component={motion.tr}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          sx={{ '&:hover': { bgcolor: 'rgba(163, 230, 53, 0.04)' } }}
                         >
                           <TableCell>
-                            <Typography sx={{ fontSize: '0.88rem' }}>
-                              {record.date?.toDate?.().toLocaleDateString('fr-FR')}
+                            <Typography sx={{ fontSize: '0.88rem', fontWeight: 600 }}>
+                              {record.date?.toDate?.().toLocaleDateString() || record.date}
                             </Typography>
                           </TableCell>
                           <TableCell>
@@ -415,41 +382,37 @@ export default function Sante() {
                                 label={record.diagnostic?.substring(0, 30) + (record.diagnostic?.length > 30 ? '...' : '')} 
                                 color={severityColor}
                                 size="small"
-                                sx={{ fontWeight: 600, fontSize: '0.7rem' }}
+                                sx={{ fontWeight: 800, fontSize: '0.65rem' }}
                               />
                               {severityColor === 'error' && (
-                                <Warning sx={{ fontSize: 14, color: '#ef4444' }} />
+                                <Warning sx={{ fontSize: 14, color: theme.palette.error.main }} />
                               )}
                             </Box>
                           </TableCell>
                           <TableCell>
-                            <Typography sx={{ fontSize: '0.85rem', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {record.traitement || '-'}
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            <Typography sx={{ fontSize: '0.85rem' }}>{record.medicaments || '-'}</Typography>
+                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600 }}>{record.medicaments || '-'}</Typography>
                           </TableCell>
-                          <TableCell align="center">
-                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-                              <Tooltip title="Voir les détails">
+                          <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>
+                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: settings.language === 'ar' ? 'flex-start' : 'flex-end' }}>
+                              <Tooltip title={t('Intervention Detail')}>
                                 <IconButton
                                   size="small"
                                   onClick={() => {
                                     setSelectedRecord(record);
                                     setViewOpen(true);
                                   }}
-                                  sx={{
-                                    borderRadius: '8px',
-                                    color: '#3b82f6',
-                                    '&:hover': { background: '#eff6ff' },
-                                  }}
+                                  sx={{ color: '#3b82f6' }}
                                 >
                                   <Visibility fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                               
-                              <Tooltip title="Modifier">
+                              <Tooltip title={t('Edit')}>
                                 <IconButton
                                   size="small"
                                   onClick={() => { 
@@ -457,29 +420,21 @@ export default function Sante() {
                                     setFormData({
                                       ...record,
                                       symptomes: record.symptomes?.join(', ') || '',
-                                      date: record.date?.toDate?.().toISOString().split('T')[0] || new Date().toISOString().split('T')[0]
+                                      date: record.date?.toDate?.().toISOString().split('T')[0] || record.date || new Date().toISOString().split('T')[0]
                                     }); 
                                     setOpen(true);
                                   }}
-                                  sx={{
-                                    borderRadius: '8px',
-                                    color: GREEN_MAIN,
-                                    '&:hover': { background: GREEN_SOFT },
-                                  }}
+                                  sx={{ color: theme.palette.primary.main }}
                                 >
                                   <Edit fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                               
-                              <Tooltip title="Supprimer">
+                              <Tooltip title={t('Delete')}>
                                 <IconButton
                                   size="small"
                                   onClick={() => handleDelete(record)}
-                                  sx={{
-                                    borderRadius: '8px',
-                                    color: '#ef4444',
-                                    '&:hover': { background: '#fef2f2' },
-                                  }}
+                                  sx={{ color: '#ef4444' }}
                                 >
                                   <Delete fontSize="small" />
                                 </IconButton>
@@ -490,40 +445,30 @@ export default function Sante() {
                       );
                     })
                   )}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
+                </AnimatePresence>
+              </TableBody>
+            </Table>
+          </TableContainer>
         </>
       )}
 
       {!selectedLot && lots.length > 0 && (
-        <Paper sx={{
-          p: 4, textAlign: 'center',
-          borderRadius: '16px',
-          background: GREEN_GHOST,
-          border: `1px dashed ${GREEN_MAIN}`,
-        }}>
-          <ChickenSmall size={40} color={GREEN_MAIN} />
-          <Typography sx={{ mt: 2, color: '#6b7280' }}>
-            Sélectionnez un lot pour voir les enregistrements sanitaires
+        <Paper className="glass-card" sx={{ p: 6, textAlign: 'center', borderRadius: '24px', border: `2px dashed ${theme.palette.divider}` }}>
+          <ChickenSmall size={48} color={theme.palette.primary.main} />
+          <Typography variant="h6" sx={{ mt: 3, color: 'text.secondary', fontWeight: 700 }}>
+            {t('Select batch to see health')}
           </Typography>
         </Paper>
       )}
 
       {lots.length === 0 && (
-        <Paper sx={{
-          p: 4, textAlign: 'center',
-          borderRadius: '16px',
-          background: '#fef2f2',
-          border: '1px dashed #ef4444',
-        }}>
-          <Warning sx={{ fontSize: 40, color: '#ef4444', mb: 1 }} />
-          <Typography sx={{ color: '#dc2626', fontWeight: 600 }}>
-            Aucun lot actif disponible
+        <Paper className="glass-card" sx={{ p: 6, textAlign: 'center', borderRadius: '24px', border: `2px dashed ${theme.palette.error.main}40`, bgcolor: 'rgba(239, 68, 68, 0.05)' }}>
+          <Warning sx={{ fontSize: 64, color: theme.palette.error.main, mb: 2, opacity: 0.8 }} />
+          <Typography variant="h6" sx={{ color: 'text.primary', fontWeight: 800 }}>
+            {t('No active batch available')}
           </Typography>
-          <Typography sx={{ color: '#6b7280', fontSize: '0.88rem', mt: 1 }}>
-            Veuillez créer un lot dans la section "Lots" avant d'enregistrer des données sanitaires
+          <Typography sx={{ color: 'text.secondary', mt: 1 }}>
+            {t('Create batch first health')}
           </Typography>
         </Paper>
       )}
@@ -532,155 +477,88 @@ export default function Sante() {
       <Dialog 
         open={open} 
         onClose={() => setOpen(false)} 
-        maxWidth="md" 
+        maxWidth="sm" 
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }
+          className: 'glass-card',
+          sx: { borderRadius: '24px', p: 1 }
         }}
       >
-        <DialogTitle sx={{
-          fontWeight: 800, fontSize: '1.1rem',
-          color: GREEN_DARK, pb: 0,
-          borderBottom: `1px solid ${GREEN_SOFT}`,
-          mb: 1,
-        }}>
-          {editing ? '✏️ Modifier l\'enregistrement' : '🏥 Nouvel enregistrement sanitaire'}
+        <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
+          {editing ? t('Edit') + ' ' + t('Health Tracking') : t('New Health Record')}
         </DialogTitle>
         
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent>
           <TextField
             fullWidth 
-            label="Diagnostic" 
+            label={t('Diagnosis')} 
             margin="normal" 
             multiline 
             rows={2}
             value={formData.diagnostic} 
             onChange={(e) => setFormData({ ...formData, diagnostic: e.target.value })}
             required
-            placeholder="Description du diagnostic..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Diagnosis placeholder')}
           />
           
           <TextField
             fullWidth 
-            label="Traitement" 
+            label={t('Treatment')} 
             margin="normal" 
             multiline 
             rows={2}
             value={formData.traitement} 
             onChange={(e) => setFormData({ ...formData, traitement: e.target.value })}
-            placeholder="Traitement prescrit..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Treatment placeholder')}
           />
           
           <TextField
             fullWidth 
-            label="Médicaments" 
+            label={t('Medicines')} 
             margin="normal"
             value={formData.medicaments} 
             onChange={(e) => setFormData({ ...formData, medicaments: e.target.value })}
-            placeholder="Médicaments utilisés (séparés par des virgules)"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Medicines placeholder')}
           />
           
           <TextField
             fullWidth 
-            label="Symptômes" 
+            label={t('Symptoms')} 
             margin="normal"
             value={formData.symptomes} 
             onChange={(e) => setFormData({ ...formData, symptomes: e.target.value })}
-            placeholder="Symptômes observés (séparés par des virgules)"
-            helperText="Ex: éternuements, perte d'appétit, abattement"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Symptoms placeholder')}
+            helperText={t('Symptoms helper')}
           />
           
           <TextField
             fullWidth 
-            label="Recommandations" 
+            label={t('Recommendations')} 
             margin="normal" 
             multiline 
             rows={2}
             value={formData.recommandations} 
             onChange={(e) => setFormData({ ...formData, recommandations: e.target.value })}
-            placeholder="Recommandations supplémentaires..."
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
+            placeholder={t('Recommendations placeholder')}
           />
           
           <TextField
             fullWidth 
-            label="Date" 
+            label={t('Date')} 
             type="date" 
             margin="normal"
             value={formData.date} 
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             InputLabelProps={{ shrink: true }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: '10px',
-                '&.Mui-focused fieldset': { borderColor: GREEN_MAIN },
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: GREEN_MAIN },
-            }}
           />
         </DialogContent>
         
-        <DialogActions sx={{ px: 3, pb: 2.5, gap: 1 }}>
-          <Button
-            onClick={() => setOpen(false)}
-            sx={{
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
-              color: '#6b7280', border: '1px solid #e5e7eb',
-              '&:hover': { background: '#f9fafb' },
-            }}
-          >
-            Annuler
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={() => setOpen(false)} sx={{ color: 'text.secondary' }}>
+            {t('Cancel')}
           </Button>
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            sx={{
-              background: `linear-gradient(135deg, ${GREEN_MID} 0%, ${GREEN_DARK} 100%)`,
-              borderRadius: '10px', textTransform: 'none', fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(20,83,45,0.3)',
-              '&:hover': {
-                background: `linear-gradient(135deg, ${GREEN_DARK} 0%, #0d3d1a 100%)`,
-              },
-            }}
-          >
-            Enregistrer
+          <Button variant="contained" onClick={handleSave}>
+            {t('Save')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -689,97 +567,84 @@ export default function Sante() {
       <Dialog 
         open={viewOpen} 
         onClose={() => setViewOpen(false)} 
-        maxWidth="md" 
+        maxWidth="sm" 
         fullWidth
         PaperProps={{
-          sx: {
-            borderRadius: '16px',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.15)',
-          }
+          className: 'glass-card',
+          sx: { borderRadius: '24px', p: 1 }
         }}
       >
-        <DialogTitle sx={{
-          fontWeight: 800, fontSize: '1.1rem',
-          color: GREEN_DARK, pb: 0,
-          borderBottom: `1px solid ${GREEN_SOFT}`,
-          mb: 1,
-        }}>
-          Détail de l'enregistrement sanitaire
+        <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
+          {t('Health Record Detail')}
         </DialogTitle>
         
-        <DialogContent sx={{ pt: 2 }}>
+        <DialogContent>
           {selectedRecord && (
-            <Box sx={{ mt: 1 }}>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Date
+            <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                  {t('Date')}
                 </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedRecord.date?.toDate?.().toLocaleDateString('fr-FR')}</Typography>
+                <Typography sx={{ fontWeight: 700 }}>{selectedRecord.date?.toDate?.().toLocaleDateString() || selectedRecord.date}</Typography>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Diagnostic
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                  {t('Diagnosis')}
                 </Typography>
                 <Chip 
                   label={getSeverityText(selectedRecord.diagnostic || '')} 
                   color={getSeverityColor(selectedRecord.diagnostic || '')}
                   size="small"
-                  sx={{ mb: 1 }}
+                  sx={{ mb: 1, fontWeight: 800 }}
                 />
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedRecord.diagnostic}</Typography>
+                <Typography sx={{ color: 'text.primary' }}>{selectedRecord.diagnostic}</Typography>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Traitement
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                  {t('Treatment')}
                 </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedRecord.traitement || '-'}</Typography>
+                <Typography sx={{ color: 'text.primary' }}>{selectedRecord.traitement || '-'}</Typography>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Médicaments
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                  {t('Medicines')}
                 </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedRecord.medicaments || '-'}</Typography>
+                <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>{selectedRecord.medicaments || '-'}</Typography>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Symptômes
+              <Box>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                  {t('Symptoms')}
                 </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                   {selectedRecord.symptomes?.length > 0 ? (
                     selectedRecord.symptomes.map((symptome, idx) => (
-                      <Chip key={idx} label={symptome} size="small" sx={{ background: GREEN_SOFT }} />
+                      <Chip key={idx} label={symptome} size="small" sx={{ bgcolor: 'rgba(163, 230, 53, 0.1)', fontWeight: 600 }} />
                     ))
                   ) : (
-                    <Typography sx={{ fontSize: '0.9rem' }}>-</Typography>
+                    <Typography sx={{ color: 'text.secondary' }}>-</Typography>
                   )}
                 </Box>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="subtitle2" sx={{ color: GREEN_MAIN, fontWeight: 700, mb: 0.5 }}>
-                  Recommandations
-                </Typography>
-                <Typography sx={{ fontSize: '0.9rem' }}>{selectedRecord.recommandations || '-'}</Typography>
-              </Box>
+              {selectedRecord.recommandations && (
+                <Box sx={{ p: 2, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
+                    {t('Recommendations')}
+                  </Typography>
+                  <Typography variant="body2">{selectedRecord.recommandations}</Typography>
+                </Box>
+              )}
             </Box>
           )}
         </DialogContent>
         
-        <DialogActions sx={{ px: 3, pb: 2.5 }}>
-          <Button
-            onClick={() => setViewOpen(false)}
-            sx={{
-              borderRadius: '10px', textTransform: 'none', fontWeight: 600,
-              background: GREEN_GHOST,
-              color: GREEN_DARK,
-              '&:hover': { background: GREEN_SOFT },
-            }}
-          >
-            Fermer
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button variant="contained" onClick={() => setViewOpen(false)} fullWidth sx={{ borderRadius: '12px' }}>
+            {t('Close')}
           </Button>
         </DialogActions>
       </Dialog>
