@@ -193,6 +193,7 @@ export const typesIntervention = [
   'Changement de litière'
 ];
 // ============ INTERVENTIONS ============
+// ============ INTERVENTIONS ============
 export const getInterventions = async (lotId) => {
   try {
     const snapshot = await getDocs(query(
@@ -225,7 +226,8 @@ export const addIntervention = async (lotId, data) => {
       date: dateObj,
       createdAt: Timestamp.now(),
       createdBy: auth.currentUser?.uid,
-      createdByName: auth.currentUser?.email
+      createdByName: auth.currentUser?.email,
+      estTerminee: false // ✅ NOUVEAU : Statut par défaut
     });
   } catch (error) {
     console.error("Erreur addIntervention:", error);
@@ -247,6 +249,18 @@ export const deleteIntervention = async (lotId, interventionId) => {
     await deleteDoc(doc(db, 'lots', lotId, 'interventions', interventionId));
   } catch (error) {
     console.error("Erreur deleteIntervention:", error);
+    throw error;
+  }
+};
+
+// ✅ NOUVELLE FONCTION : Pour changer le statut depuis le Web
+export const toggleInterventionStatus = async (lotId, interventionId, nouveauStatut) => {
+  try {
+    await updateDoc(doc(db, 'lots', lotId, 'interventions', interventionId), {
+      estTerminee: nouveauStatut
+    });
+  } catch (error) {
+    console.error("Erreur toggleInterventionStatus:", error);
     throw error;
   }
 };

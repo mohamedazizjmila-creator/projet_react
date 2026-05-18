@@ -4,14 +4,14 @@ import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { getStorage } from "firebase/storage";
 
-// Votre configuration Firebase (celle que vous venez de créer)
+// Configuration Firebase avec variables d'environnement
 const firebaseConfig = {
-  apiKey: "AIzaSyATMTwMI-7nk1GUbrCG6q7Bu61S5x27LFw",
-  authDomain: "avibiotech-platform.firebaseapp.com",
-  projectId: "avibiotech-platform",
-  storageBucket: "avibiotech-platform.firebasestorage.app",
-  messagingSenderId: "70599779092",
-  appId: "1:70599779092:web:afdec5d9bbc8c724ba1801"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
 // Initialiser Firebase

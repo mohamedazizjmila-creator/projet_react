@@ -5,7 +5,8 @@ import {
   TextField, DialogActions, Alert, Chip, MenuItem, FormControl,
   InputLabel, Select, Typography, Tooltip, Grid, useTheme
 } from '@mui/material';
-import { Add, Edit, Delete, Refresh, Visibility, MedicalServices, Warning } from '@mui/icons-material';
+// ✅ AJOUT DES ICÔNES CheckCircle ET RadioButtonUnchecked
+import { Add, Edit, Delete, Refresh, Visibility, MedicalServices, Warning, CheckCircle, RadioButtonUnchecked } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getLots, getBatiments } from '../../services/firestore';
@@ -16,6 +17,7 @@ import {
   addIntervention, 
   updateIntervention, 
   deleteIntervention,
+  toggleInterventionStatus, // ✅ NOUVELLE FONCTION IMPORTÉE
   typesIntervention
 } from '../../services/firestore';
 
@@ -196,6 +198,21 @@ export default function Interventions() {
     }
   };
 
+  // ✅ NOUVELLE FONCTION : Gère le clic sur la coche
+  const handleToggleStatus = async (intervention) => {
+    try {
+      const nouveauStatut = !intervention.estTerminee;
+      await toggleInterventionStatus(selectedLot, intervention.id, nouveauStatut);
+      // Mettre à jour l'affichage localement sans recharger tout
+      setInterventions(prev => 
+        prev.map(i => i.id === intervention.id ? { ...i, estTerminee: nouveauStatut } : i)
+      );
+    } catch (err) {
+      console.error("Erreur changement statut", err);
+      setError(t('Error updating status'));
+    }
+  };
+
   const getTypeColor = (type) => {
     switch(type) {
       case 'Vaccination': return 'primary';
@@ -343,6 +360,7 @@ export default function Interventions() {
             <Table stickyHeader>
               <TableHead>
                 <TableRow>
+                  <TableCell>{t('Status')}</TableCell> {/* ✅ NOUVELLE COLONNE STATUT */}
                   <TableCell>{t('Date')}</TableCell>
                   <TableCell>{t('Type')}</TableCell>
                   <TableCell>{t('Description')}</TableCell>
@@ -355,23 +373,43 @@ export default function Interventions() {
                 <AnimatePresence>
                   {interventions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} sx={{ textAlign: 'center', py: 8 }}>
+                      <TableCell colSpan={7} sx={{ textAlign: 'center', py: 8 }}>
                         <MedicalServices sx={{ fontSize: 48, mb: 2, color: 'text.secondary', opacity: 0.5 }} />
                         <Typography sx={{ color: 'text.secondary' }}>{t('No intervention recorded')}</Typography>
                       </TableCell>
                     </TableRow>
                   ) : (
-                    interventions.map((intervention, idx) => (
+                    interventions.map((intervention) => (
                       <TableRow 
                         key={intervention.id} 
                         component={motion.tr}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        sx={{ '&:hover': { bgcolor: 'rgba(163, 230, 53, 0.04)' } }}
+                        sx={{ 
+                          '&:hover': { bgcolor: 'rgba(163, 230, 53, 0.04)' },
+                          // ✅ STYLE: Transparence si terminée
+                          opacity: intervention.estTerminee ? 0.6 : 1 
+                        }}
                       >
+                        {/* ✅ NOUVELLE CELLULE CHECKBOX */}
                         <TableCell>
-                          <Typography sx={{ fontSize: '0.88rem', fontWeight: 600 }}>
+                          <Tooltip title={intervention.estTerminee ? t('Mark as pending') : t('Mark as done')}>
+                            <IconButton 
+                              onClick={() => handleToggleStatus(intervention)}
+                              color={intervention.estTerminee ? "success" : "default"}
+                            >
+                              {intervention.estTerminee ? <CheckCircle /> : <RadioButtonUnchecked />}
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+
+                        <TableCell>
+                          <Typography sx={{ 
+                            fontSize: '0.88rem', 
+                            fontWeight: 600,
+                            textDecoration: intervention.estTerminee ? 'line-through' : 'none' // ✅ STYLE BARRÉ
+                          }}>
                             {intervention.date?.toDate?.().toLocaleDateString() || intervention.date}
                           </Typography>
                         </TableCell>
@@ -384,7 +422,10 @@ export default function Interventions() {
                           />
                         </TableCell>
                         <TableCell>
-                          <Typography sx={{ fontSize: '0.85rem', color: 'text.secondary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <Typography sx={{ 
+                            fontSize: '0.85rem', color: 'text.secondary', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            textDecoration: intervention.estTerminee ? 'line-through' : 'none' // ✅ STYLE BARRÉ
+                          }}>
                             {intervention.description || '-'}
                           </Typography>
                         </TableCell>
@@ -595,6 +636,16 @@ export default function Interventions() {
         <DialogContent>
           {selectedIntervention && (
             <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* ✅ AFFICHER LE STATUT DANS LA POPUP */}
+              <Box>
+                 <Chip 
+                    icon={selectedIntervention.estTerminee ? <CheckCircle /> : <RadioButtonUnchecked />} 
+                    label={selectedIntervention.estTerminee ? t('Completed') : t('Pending')} 
+                    color={selectedIntervention.estTerminee ? "success" : "default"} 
+                    sx={{ fontWeight: 800, mb: 2 }} 
+                  />
+              </Box>
+
               <Box>
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 1, display: 'block' }}>
                   {t('Type')}
