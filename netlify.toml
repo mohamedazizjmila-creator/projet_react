@@ -4,6 +4,12 @@
 
 [build.environment]
   CI = "false"
+  REACT_APP_FIREBASE_API_KEY = "AIzaSyATMTwMI-7nk1GUbrCG6q7Bu61S5x27LFw"
+  REACT_APP_FIREBASE_AUTH_DOMAIN = "avibiotech-platform.firebaseapp.com"
+  REACT_APP_FIREBASE_PROJECT_ID = "avibiotech-platform"
+  REACT_APP_FIREBASE_STORAGE_BUCKET = "avibiotech-platform.firebasestorage.app"
+  REACT_APP_FIREBASE_MESSAGING_SENDER_ID = "70599779092"
+  REACT_APP_FIREBASE_APP_ID = "1:70599779092:web:afdec5d9bbc8c724ba1801"
 
 [[redirects]]
   from = "/*"
