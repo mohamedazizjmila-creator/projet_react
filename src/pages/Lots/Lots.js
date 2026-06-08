@@ -5,11 +5,16 @@ import {
   TextField, DialogActions, Alert, Typography, Chip, Tooltip, MenuItem,
   useTheme, Grid
 } from '@mui/material';
-import { Add, Edit, Delete, CheckCircle, Cancel } from '@mui/icons-material';
+import { Add, Edit, Delete, CheckCircle, Cancel, PictureAsPdf } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSnackbar } from 'notistack';
 import { getLots, addLot, updateLot, deleteLot, getBatiments } from '../../services/firestore';
+import { getInterventions, getSanteRecords, getProduction } from '../../services/firestore';
+import { useAuth } from '../../contexts/AuthContext';
 import { useSettings } from '../../contexts/SettingsContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';  // ✅ IMPORT CORRECT
 
 // ── Small chicken for decoration ─────────────────────────────────────────────
 function ChickenSmall({ size = 20, color = '#a3e635' }) {
@@ -29,6 +34,8 @@ export default function Lots() {
   const { t } = useTranslation();
   const theme = useTheme();
   const { settings } = useSettings();
+  const { userRole } = useAuth();
+  const { enqueueSnackbar } = useSnackbar();
   const [lots, setLots] = useState([]);
   const [batiments, setBatiments] = useState([]);
   const [open, setOpen] = useState(false);
@@ -41,7 +48,9 @@ export default function Lots() {
     statut: 'actif'
   });
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [generatingReport, setGeneratingReport] = useState(false);
+
+  const canManageReports = userRole === 'admin' || userRole === 'responsable';
 
   useEffect(() => {
     loadLots();
@@ -66,16 +75,15 @@ export default function Lots() {
     try {
       if (editing) {
         await updateLot(editing.id, formData);
-        setSuccess(t('Batch updated'));
+        enqueueSnackbar(t('Batch updated'), { variant: 'success' });
       } else {
         await addLot(formData);
-        setSuccess(t('Batch added'));
+        enqueueSnackbar(t('Batch added'), { variant: 'success' });
       }
       setOpen(false);
       setEditing(null);
       setFormData({ batimentId: '', nbInitial: '', dateArrivee: '', typeVolailles: '', statut: 'actif' });
       loadLots();
-      setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError(err.message);
     }
@@ -84,9 +92,8 @@ export default function Lots() {
   const handleDelete = async (id) => {
     if (window.confirm(t('Delete batch confirmation'))) {
       await deleteLot(id);
-      setSuccess(t('Batch deleted'));
+      enqueueSnackbar(t('Batch deleted'), { variant: 'success' });
       loadLots();
-      setTimeout(() => setSuccess(''), 3000);
     }
   };
 
@@ -98,12 +105,250 @@ export default function Lots() {
     if (window.confirm(message)) {
       try {
         await updateLot(lot.id, { ...lot, statut: nouveauStatut });
-        setSuccess(nouveauStatut === 'termine' ? t('Batch closed') : t('Batch reopened'));
+        enqueueSnackbar(nouveauStatut === 'termine' ? t('Batch closed') : t('Batch reopened'), { variant: 'success' });
         loadLots();
-        setTimeout(() => setSuccess(''), 3000);
       } catch (err) {
         setError(err.message);
       }
+    }
+  };
+
+  // ── Fonction pour générer le rapport PDF ──
+  const generateReport = async (lot) => {
+    setGeneratingReport(true);
+    
+    try {
+      // Charger toutes les données liées au lot
+      const [interventions, santeRecords, productions] = await Promise.all([
+        getInterventions(lot.id),
+        getSanteRecords(lot.id),
+        getProduction(lot.id)
+      ]);
+
+      const batiment = batiments.find(b => b.id === lot.batimentId);
+      
+      // Créer le PDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // En-tête
+      doc.setFillColor(163, 230, 53, 0.1);
+      doc.rect(0, 0, pageWidth, 40, 'F');
+      doc.setTextColor(34, 34, 34);
+      doc.setFontSize(20);
+      doc.setFont('helvetica', 'bold');
+      doc.text(t('Batch Report'), pageWidth / 2, 20, { align: 'center' });
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`${t('Generated on')}: ${new Date().toLocaleDateString()}`, pageWidth / 2, 32, { align: 'center' });
+      
+      // Informations du lot
+      doc.setFontSize(14);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.text(t('Batch Information'), 14, 55);
+      
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      
+      const lotInfo = [
+        [`${t('Building')}:`, batiment?.nom || lot.batimentId],
+        [`${t('Arrival Date')}:`, lot.dateArrivee?.toDate?.().toLocaleDateString() || lot.dateArrivee || '-'],
+        [`${t('Initial Number')}:`, `${lot.nbInitial} ${t('subjects')}`],
+        [`${t('Poultry Type')}:`, lot.typeVolailles || t('Standard')],
+        [`${t('Closing Date')}:`, lot.dateFermeture?.toDate?.().toLocaleDateString() || new Date().toLocaleDateString()],
+        [`${t('Status')}:`, lot.statut === 'termine' ? t('Finished Status') : t('Active Status')]
+      ];
+      
+      let yPos = 65;
+      lotInfo.forEach(([label, value]) => {
+        doc.text(`${label}`, 14, yPos);
+        doc.text(`${value}`, 80, yPos);
+        yPos += 7;
+      });
+      
+      // Calcul des totaux
+      const totalMortalite = productions.reduce((sum, p) => sum + (p.mortalite || 0), 0);
+      const totalConsommation = productions.reduce((sum, p) => sum + (p.consommationAliment || 0), 0);
+      const totalOeufs = productions.reduce((sum, p) => sum + (p.productionOeufs || 0), 0);
+      const nbFinal = (lot.nbInitial || 0) - totalMortalite;
+      const tauxSurvie = lot.nbInitial > 0 ? ((nbFinal / lot.nbInitial) * 100).toFixed(1) : 0;
+      
+      // Cartes de statistiques
+      yPos += 10;
+      doc.setFillColor(240, 248, 255);
+      doc.roundedRect(14, yPos, 55, 30, 3, 3, 'F');
+      doc.setFontSize(9);
+      doc.setTextColor(80, 80, 80);
+      doc.text(t('Final Count'), 41, yPos + 10, { align: 'center' });
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(34, 197, 94);
+      doc.text(`${nbFinal}`, 41, yPos + 23, { align: 'center' });
+      
+      doc.setFillColor(240, 248, 255);
+      doc.roundedRect(75, yPos, 55, 30, 3, 3, 'F');
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(t('Survival Rate'), 102, yPos + 10, { align: 'center' });
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(34, 197, 94);
+      doc.text(`${tauxSurvie}%`, 102, yPos + 23, { align: 'center' });
+      
+      doc.setFillColor(240, 248, 255);
+      doc.roundedRect(136, yPos, 55, 30, 3, 3, 'F');
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(t('Total Mortality'), 163, yPos + 10, { align: 'center' });
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(239, 68, 68);
+      doc.text(`${totalMortalite}`, 163, yPos + 23, { align: 'center' });
+      
+      yPos += 45;
+      
+      // Consommation et production
+      doc.setFillColor(245, 245, 245);
+      doc.roundedRect(14, yPos, 85, 25, 3, 3, 'F');
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(80, 80, 80);
+      doc.text(t('Feed Consumed'), 56, yPos + 8, { align: 'center' });
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text(`${totalConsommation} kg`, 56, yPos + 19, { align: 'center' });
+      
+      const typeVolailles = lot.typeVolailles?.toLowerCase() || '';
+      const isPondeuse = typeVolailles.includes('pondeuse') || typeVolailles.includes('œuf') || typeVolailles.includes('oeuf');
+      
+      if (isPondeuse) {
+        doc.setFillColor(245, 245, 245);
+        doc.roundedRect(105, yPos, 85, 25, 3, 3, 'F');
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        doc.text(t('Eggs Produced'), 147, yPos + 8, { align: 'center' });
+        doc.setFontSize(12);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text(`${totalOeufs}`, 147, yPos + 19, { align: 'center' });
+      }
+      
+      yPos += 40;
+      
+      // Tableau des interventions - ✅ CORRECTION avec autoTable
+      if (interventions && interventions.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text(t('Interventions'), 14, 20);
+        
+        const interventionData = interventions.map(i => [
+          i.date?.toDate?.().toLocaleDateString() || i.date || '-',
+          t(i.type) || i.type,
+          i.description?.substring(0, 40) || '-',
+          i.responsable || '-',
+          i.estTerminee ? t('Completed') : t('Pending')
+        ]);
+        
+        // ✅ Utilisation correcte de autoTable
+        autoTable(doc, {
+          startY: 28,
+          head: [[t('Date'), t('Type'), t('Description'), t('Responsible'), t('Status')]],
+          body: interventionData,
+          theme: 'striped',
+          headStyles: { fillColor: [163, 230, 53], textColor: [0, 0, 0], fontStyle: 'bold' },
+          margin: { left: 14, right: 14 }
+        });
+      }
+      
+      // Tableau de la santé
+      if (santeRecords && santeRecords.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text(t('Health Records'), 14, 20);
+        
+        const santeData = santeRecords.map(r => [
+          r.date?.toDate?.().toLocaleDateString() || r.date || '-',
+          r.diagnostic?.substring(0, 30) || '-',
+          r.traitement?.substring(0, 30) || '-',
+          r.medicaments || '-'
+        ]);
+        
+        autoTable(doc, {
+          startY: 28,
+          head: [[t('Date'), t('Diagnosis'), t('Treatment'), t('Medicines')]],
+          body: santeData,
+          theme: 'striped',
+          headStyles: { fillColor: [163, 230, 53], textColor: [0, 0, 0], fontStyle: 'bold' },
+          margin: { left: 14, right: 14 }
+        });
+      }
+      
+      // Tableau de la production
+      if (productions && productions.length > 0) {
+        doc.addPage();
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(0, 0, 0);
+        doc.text(t('Production Records'), 14, 20);
+        
+        const productionData = productions.map(p => {
+          const row = [
+            p.date?.toDate?.().toLocaleDateString() || p.date || '-',
+            p.mortalite || '0',
+            `${p.consommationAliment || 0} kg`
+          ];
+          if (isPondeuse) {
+            row.push(p.productionOeufs || '0');
+          }
+          return row;
+        });
+        
+        const productionHeaders = [t('Date'), t('Mortality'), t('Feed Consumed')];
+        if (isPondeuse) productionHeaders.push(t('Eggs Produced'));
+        
+        autoTable(doc, {
+          startY: 28,
+          head: [productionHeaders],
+          body: productionData,
+          theme: 'striped',
+          headStyles: { fillColor: [163, 230, 53], textColor: [0, 0, 0], fontStyle: 'bold' },
+          margin: { left: 14, right: 14 }
+        });
+      }
+      
+      // Pied de page
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(
+          `${t('Generated by')}: ${userRole} - ${new Date().toLocaleString()}`,
+          pageWidth / 2,
+          doc.internal.pageSize.getHeight() - 10,
+          { align: 'center' }
+        );
+      }
+      
+      // Sauvegarder le PDF
+      doc.save(`lot_${lot.id}_report.pdf`);
+      enqueueSnackbar(t('Report generated successfully'), { variant: 'success' });
+      
+    } catch (error) {
+      console.error('Erreur lors de la génération du rapport:', error);
+      enqueueSnackbar(t('Error generating report'), { variant: 'error' });
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -155,17 +400,6 @@ export default function Lots() {
           {t('New Batch')}
         </Button>
       </Box>
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>
-          {success}
-        </Alert>
-      )}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>
-          {error}
-        </Alert>
-      )}
 
       {/* ── Summary cards ── */}
       <Grid container spacing={settings.compactMode ? 1.5 : 2} sx={{ mb: 4 }}>
@@ -261,51 +495,78 @@ export default function Lots() {
                     />
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label={getStatutText(lot.statut)} 
-                      color={getStatutColor(lot.statut)}
-                      size="small"
-                      sx={{ fontWeight: 700, fontSize: '0.65rem' }}
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      <Chip 
+                        label={getStatutText(lot.statut)} 
+                        color={getStatutColor(lot.statut)}
+                        size="small"
+                        sx={{ fontWeight: 700, fontSize: '0.65rem' }}
+                      />
+                      
+                      {/* ✅ BOUTON RAPPORT PDF - Avec span wrapper pour Tooltip */}
+                      {lot.statut === 'termine' && canManageReports && (
+                        <Tooltip title={t('Generate Report')}>
+                          <span>
+                            <IconButton 
+                              size="small"
+                              onClick={() => generateReport(lot)}
+                              disabled={generatingReport}
+                              sx={{ 
+                                color: '#ef4444',
+                                '&:hover': { bgcolor: 'rgba(239, 68, 68, 0.1)' }
+                              }}
+                            >
+                              <PictureAsPdf fontSize="small" />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>
                     <Box sx={{ display: 'flex', gap: 0.5, justifyContent: settings.language === 'ar' ? 'flex-start' : 'flex-end' }}>
                       <Tooltip title={t('Edit')}>
-                        <IconButton 
-                          size="small"
-                          onClick={() => { 
-                            setEditing(lot); 
-                            setFormData({ 
-                              ...lot, 
-                              dateArrivee: lot.dateArrivee?.toDate?.().toISOString().split('T')[0] || lot.dateArrivee || '' 
-                            }); 
-                            setOpen(true);
-                          }}
-                          disabled={lot.statut === 'termine'}
-                          sx={{ color: theme.palette.primary.main }}
-                        >
-                          <Edit fontSize="small" />
-                        </IconButton>
+                        <span>
+                          <IconButton 
+                            size="small"
+                            onClick={() => { 
+                              setEditing(lot); 
+                              setFormData({ 
+                                ...lot, 
+                                dateArrivee: lot.dateArrivee?.toDate?.().toISOString().split('T')[0] || lot.dateArrivee || '' 
+                              }); 
+                              setOpen(true);
+                            }}
+                            disabled={lot.statut === 'termine'}
+                            sx={{ color: theme.palette.primary.main }}
+                          >
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                       
                       <Tooltip title={lot.statut === 'actif' ? t('Close confirmation') : t('Reopen confirmation')}>
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleChangeStatut(lot, lot.statut === 'actif' ? 'termine' : 'actif')}
-                          sx={{ color: lot.statut === 'actif' ? '#16a34a' : '#f59e0b' }}
-                        >
-                          {lot.statut === 'actif' ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />}
-                        </IconButton>
+                        <span>
+                          <IconButton 
+                            size="small"
+                            onClick={() => handleChangeStatut(lot, lot.statut === 'actif' ? 'termine' : 'actif')}
+                            sx={{ color: lot.statut === 'actif' ? '#16a34a' : '#f59e0b' }}
+                          >
+                            {lot.statut === 'actif' ? <CheckCircle fontSize="small" /> : <Cancel fontSize="small" />}
+                          </IconButton>
+                        </span>
                       </Tooltip>
                       
                       <Tooltip title={t('Delete')}>
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleDelete(lot.id)}
-                          sx={{ color: '#ef4444' }}
-                        >
-                          <Delete fontSize="small" />
-                        </IconButton>
+                        <span>
+                          <IconButton 
+                            size="small"
+                            onClick={() => handleDelete(lot.id)}
+                            sx={{ color: '#ef4444' }}
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </span>
                       </Tooltip>
                     </Box>
                   </TableCell>
