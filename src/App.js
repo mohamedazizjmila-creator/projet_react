@@ -65,11 +65,11 @@ function AppRoutes() {
         } />
         
         {/* Lots - admin, responsable seulement */}
-        <Route path="/lots" element={
-          <ProtectedRoute allowedRoles={['admin', 'responsable']}>
-            <Lots />
-          </ProtectedRoute>
-        } />
+      <Route path="/lots" element={
+  <ProtectedRoute allowedRoles={['admin', 'responsable', 'technicien', 'veterinaire']}>
+    <Lots />
+  </ProtectedRoute>
+} />
         
         {/* Production - tout le monde */}
         <Route path="/production" element={<Production />} />
@@ -120,4 +120,4 @@ function App() {
   );
 }
 
-export default App;
+export default App;

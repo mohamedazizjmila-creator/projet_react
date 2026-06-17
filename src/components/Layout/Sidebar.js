@@ -33,22 +33,33 @@ export default function Sidebar({ children }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const menuItems = [
-    { text: t('Dashboard'), icon: <Dashboard />, path: '/' },
-    ...( (userRole === 'admin' || userRole === 'responsable') ? [
-      { text: t('Bâtiments'),  icon: <Home />,      path: '/batiments' },
-      { text: t('Lots'),       icon: <Agriculture />, path: '/lots' },
-      { text: t('Stocks'),     icon: <Inventory />,  path: '/stocks' }
-    ] : []),
-    { text: t('Production'),    icon: <ProductionQuantityLimits />, path: '/production' },
-    { text: t('Interventions'), icon: <AddTask />,                  path: '/interventions' },
-    ...( (userRole === 'admin' || userRole === 'responsable' || userRole === 'veterinaire') ? [
-      { text: t('Santé'), icon: <MedicalServices />, path: '/sante' }
-    ] : []),
-    ...( userRole === 'admin' ? [
-      { text: t('Users'), icon: <People />, path: '/users' }
-    ] : [])
-  ];
+const menuItems = [
+  { text: t('Dashboard'), icon: <Dashboard />, path: '/' },
+
+  // Bâtiments et Stocks — admin et responsable seulement
+  ...( (userRole === 'admin' || userRole === 'responsable') ? [
+    { text: t('Bâtiments'), icon: <Home />,      path: '/batiments' },
+    { text: t('Stocks'),    icon: <Inventory />,  path: '/stocks' }
+  ] : []),
+
+  // Lots — admin, responsable ET technicien (lecture seule) ET vétérinaire (lecture seule)
+  ...( (userRole === 'admin' || userRole === 'responsable' || userRole === 'technicien' || userRole === 'veterinaire') ? [
+    { text: t('Lots'), icon: <Agriculture />, path: '/lots' }
+  ] : []),
+
+  { text: t('Production'),    icon: <ProductionQuantityLimits />, path: '/production' },
+  { text: t('Interventions'), icon: <AddTask />,                  path: '/interventions' },
+
+  // Santé — admin, responsable et vétérinaire
+  ...( (userRole === 'admin' || userRole === 'responsable' || userRole === 'veterinaire') ? [
+    { text: t('Santé'), icon: <MedicalServices />, path: '/sante' }
+  ] : []),
+
+  // Users — admin seulement
+  ...( userRole === 'admin' ? [
+    { text: t('Users'), icon: <People />, path: '/users' }
+  ] : [])
+];
 
   const handleToggleSidebar = () => setCollapsed(!collapsed);
   const handleDrawerToggle = () => setMobileOpen(!mobileOpen);

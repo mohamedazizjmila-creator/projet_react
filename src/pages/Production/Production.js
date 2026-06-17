@@ -8,6 +8,7 @@ import { Add, Inventory, Warning } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { getLots, addProduction, getProduction, getStocks, updateStock, getBatiments } from '../../services/firestore';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 function StatCard({ value, label, icon, active }) {
   const theme = useTheme();
@@ -30,6 +31,9 @@ export default function Production() {
   const { t } = useTranslation();
   const theme = useTheme();
   const { settings } = useSettings();
+  const { userRole } = useAuth();
+  const isVeterinaire = userRole === 'veterinaire';
+
   const [lots, setLots] = useState([]);
   const [batiments, setBatiments] = useState([]);
   const [selectedLot, setSelectedLot] = useState('');
@@ -110,17 +114,8 @@ export default function Production() {
     try {
       const stocks = await getStocks();
       const stockAliment = stocks.find(s => s.nom?.includes("Aliment"));
-      
-      if (!stockAliment) {
-        setError(t('Feed stock not found'));
-        return false;
-      }
-      
-      if (stockAliment.quantite < quantiteConsommee) {
-        setError(t('Insufficient stock', { count: stockAliment.quantite, unit: stockAliment.unite || 'kg' }));
-        return false;
-      }
-      
+      if (!stockAliment) { setError(t('Feed stock not found')); return false; }
+      if (stockAliment.quantite < quantiteConsommee) { setError(t('Insufficient stock', { count: stockAliment.quantite, unit: stockAliment.unite || 'kg' })); return false; }
       const nouvelleQuantite = stockAliment.quantite - quantiteConsommee;
       await updateStock(stockAliment.id, { ...stockAliment, quantite: nouvelleQuantite });
       setStockActuel(nouvelleQuantite);
@@ -131,58 +126,53 @@ export default function Production() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    
-    if (!selectedLot) {
-      setError(t('Batch required'));
-      return;
-    }
-    
-    const quantiteAliment = parseInt(formData.consommationAliment);
-    const mortaliteValue = parseInt(formData.mortalite);
-    const productionOeufsValue = parseInt(formData.productionOeufs);
-    
-    if (isNaN(quantiteAliment) || quantiteAliment <= 0) {
-      setError(t('Invalid feed quantity'));
-      return;
-    }
-    
-    if (isNaN(mortaliteValue) || mortaliteValue < 0) {
-      setError(t('Invalid mortality'));
-      return;
-    }
-    
-    if (isPondeuse() && (isNaN(productionOeufsValue) || productionOeufsValue < 0)) {
-      setError(t('Invalid egg production'));
-      return;
-    }
-    
-    const stockOk = await diminuerStockAliment(quantiteAliment);
-    if (!stockOk) return;
-    
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (isVeterinaire) return;
+  setError('');
+  setSuccess('');
+
+  if (!selectedLot) { setError(t('Batch required')); return; }
+
+  const quantiteAliment = parseInt(formData.consommationAliment);
+  const mortaliteValue = parseInt(formData.mortalite);
+  const productionOeufsValue = parseInt(formData.productionOeufs);
+
+  if (isNaN(quantiteAliment) || quantiteAliment <= 0) { setError(t('Invalid feed quantity')); return; }
+  if (isNaN(mortaliteValue) || mortaliteValue < 0) { setError(t('Invalid mortality')); return; }
+  if (isPondeuse() && (isNaN(productionOeufsValue) || productionOeufsValue < 0)) { setError(t('Invalid egg production')); return; }
+
+  // ── Vérification RG-03 : mortalité cumulée ──────────────────────────────
+  const nbInitial = Number(selectedLotDetails?.nbInitial) || 0;
+  const nouvelleMortaliteCumulee = totalMortalite + mortaliteValue;
+  if (nouvelleMortaliteCumulee > nbInitial) {
+    setError(
+      `Dépassement impossible : la mortalité cumulée (${totalMortalite} + ${mortaliteValue} = ${nouvelleMortaliteCumulee}) ` +
+      `dépasse l'effectif initial du lot (${nbInitial} sujets). ` +
+      `Maximum autorisé aujourd'hui : ${Math.max(0, nbInitial - totalMortalite)} sujet(s).`
+    );
+    return;
+  }
+  // ────────────────────────────────────────────────────────────────────────
+
+  const stockOk = await diminuerStockAliment(quantiteAliment);
+  if (!stockOk) return;
+
     const productionData = {
       mortalite: mortaliteValue,
       consommationAliment: quantiteAliment,
       date: new Date()
     };
-    
-    if (isPondeuse()) {
-      productionData.productionOeufs = productionOeufsValue;
-    }
-    
+    if (isPondeuse()) productionData.productionOeufs = productionOeufsValue;
+
     await addProduction(selectedLot, productionData);
-    
     setSuccess(t('Data recorded', { count: stockActuel - quantiteAliment, unit: stockInfo?.unite || 'kg' }));
     setFormData({ mortalite: '', consommationAliment: '', productionOeufs: '' });
     loadProductions();
-    
     setTimeout(() => setSuccess(''), 4000);
   };
 
-  const joursElevage = selectedLotDetails?.dateArrivee?.toDate 
+  const joursElevage = selectedLotDetails?.dateArrivee?.toDate
     ? Math.floor((new Date() - selectedLotDetails.dateArrivee.toDate()) / (1000 * 60 * 60 * 24))
     : 0;
 
@@ -190,14 +180,15 @@ export default function Production() {
 
   return (
     <Box sx={{ maxWidth: 1200, mx: 'auto' }}>
+      {/* ── Header ── */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4, flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
         <Box>
           <Typography variant="h4" sx={{ color: 'text.primary', fontWeight: 800 }}>{t('Production Tracking')}</Typography>
           <Typography sx={{ color: 'text.secondary', mt: 0.5 }}>{t('Production Subtitle')}</Typography>
         </Box>
-        <Box sx={{ 
-          display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5, 
-          borderRadius: '16px', 
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.5,
+          borderRadius: '16px',
           bgcolor: isStockFaible ? 'rgba(251, 191, 36, 0.1)' : 'rgba(163, 230, 53, 0.1)',
           border: `1px solid ${isStockFaible ? '#fbbf24' : '#a3e635'}40`
         }}>
@@ -214,12 +205,20 @@ export default function Production() {
 
       {success && <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>{success}</Alert>}
 
+      {/* ── Badge lecture seule pour vétérinaire ── */}
+      {isVeterinaire && (
+        <Alert severity="info" sx={{ mb: 3, borderRadius: '16px' }}>
+          {t('Read only mode veterinaire', { defaultValue: 'Mode lecture seule — vous pouvez consulter les données de production mais pas les modifier.' })}
+        </Alert>
+      )}
+
+      {/* ── Sélection du lot ── */}
       <Paper className="glass-card" sx={{ p: 3, mb: 4, borderRadius: '24px' }}>
         <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 2, display: 'block', letterSpacing: '0.1em' }}>{t('Select Batch')}</Typography>
-        <TextField 
-          select fullWidth 
-          label={t('Active Batch')} 
-          value={selectedLot} 
+        <TextField
+          select fullWidth
+          label={t('Active Batch')}
+          value={selectedLot}
           onChange={(e) => setSelectedLot(e.target.value)}
         >
           {lots.length === 0 ? (
@@ -227,7 +226,7 @@ export default function Production() {
           ) : (
             lots.map((l) => (
               <MenuItem key={l.id} value={l.id}>
-                {t('Batch info', { 
+                {t('Batch info', {
                   date: l.dateArrivee?.toDate?.().toLocaleDateString() || l.dateArrivee || 'N/A',
                   batiment: getBatimentNom(l.batimentId),
                   count: l.nbInitial,
@@ -241,6 +240,7 @@ export default function Production() {
 
       {selectedLot && selectedLotDetails && (
         <>
+          {/* ── Stats + Info lot ── */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} lg={5}>
               <Paper className="glass-card" sx={{ p: 3, borderRadius: '24px', height: '100%', bgcolor: 'rgba(163, 230, 53, 0.03)' }}>
@@ -278,27 +278,33 @@ export default function Production() {
             </Grid>
           </Grid>
 
-          <Paper className="glass-card" sx={{ p: 4, mb: 4, borderRadius: '24px' }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary', mb: 3 }}>{t('Daily Recording')}</Typography>
-            {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>{error}</Alert>}
-            <form onSubmit={handleSubmit}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={isPondeuse() ? 4 : 6}>
-                  <TextField fullWidth label={t('Mortality of the day')} type="number" value={formData.mortalite} onChange={(e) => setFormData({ ...formData, mortalite: e.target.value })} required />
-                </Grid>
-                <Grid item xs={12} sm={isPondeuse() ? 4 : 6}>
-                  <TextField fullWidth label={t('Feed consumption (kg)')} type="number" value={formData.consommationAliment} onChange={(e) => setFormData({ ...formData, consommationAliment: e.target.value })} required />
-                </Grid>
-                {isPondeuse() && (
-                  <Grid item xs={12} sm={4}>
-                    <TextField fullWidth label={t('Egg production')} type="number" value={formData.productionOeufs} onChange={(e) => setFormData({ ...formData, productionOeufs: e.target.value })} required helperText={t('Egg production helper')} />
+          {/* ── Formulaire — masqué pour vétérinaire ── */}
+          {!isVeterinaire && (
+            <Paper className="glass-card" sx={{ p: 4, mb: 4, borderRadius: '24px' }}>
+              <Typography variant="h6" sx={{ fontWeight: 800, color: 'text.primary', mb: 3 }}>{t('Daily Recording')}</Typography>
+              {error && <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>{error}</Alert>}
+              <form onSubmit={handleSubmit}>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={isPondeuse() ? 4 : 6}>
+                    <TextField fullWidth label={t('Mortality of the day')} type="number" value={formData.mortalite} onChange={(e) => setFormData({ ...formData, mortalite: e.target.value })} required />
                   </Grid>
-                )}
-              </Grid>
-              <Button type="submit" variant="contained" size="large" sx={{ mt: 4, px: 4, py: 1.5, borderRadius: '14px', fontWeight: 800 }}>{t('Save Data')}</Button>
-            </form>
-          </Paper>
+                  <Grid item xs={12} sm={isPondeuse() ? 4 : 6}>
+                    <TextField fullWidth label={t('Feed consumption (kg)')} type="number" value={formData.consommationAliment} onChange={(e) => setFormData({ ...formData, consommationAliment: e.target.value })} required />
+                  </Grid>
+                  {isPondeuse() && (
+                    <Grid item xs={12} sm={4}>
+                      <TextField fullWidth label={t('Egg production')} type="number" value={formData.productionOeufs} onChange={(e) => setFormData({ ...formData, productionOeufs: e.target.value })} required helperText={t('Egg production helper')} />
+                    </Grid>
+                  )}
+                </Grid>
+                <Button type="submit" variant="contained" size="large" sx={{ mt: 4, px: 4, py: 1.5, borderRadius: '14px', fontWeight: 800 }}>
+                  {t('Save Data')}
+                </Button>
+              </form>
+            </Paper>
+          )}
 
+          {/* ── Historique — visible pour tous ── */}
           {productions.length > 0 && (
             <TableContainer component={Paper} className="glass-card" sx={{ borderRadius: '24px', overflow: 'hidden' }}>
               <Box sx={{ p: 3, borderBottom: `1px solid ${theme.palette.divider}` }}>
@@ -314,14 +320,14 @@ export default function Production() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {productions.map((p, idx) => (
+                  {productions.map((p) => (
                     <TableRow key={p.id}>
                       <TableCell sx={{ color: 'text.secondary' }}>{p.date?.toDate?.().toLocaleDateString() || p.date}</TableCell>
                       <TableCell align="center">
-                        <Chip label={p.mortalite} size="small" sx={{ 
-                          bgcolor: p.mortalite > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(163, 230, 53, 0.1)', 
-                          color: p.mortalite > 0 ? '#f87171' : '#a3e635', 
-                          fontWeight: 800 
+                        <Chip label={p.mortalite} size="small" sx={{
+                          bgcolor: p.mortalite > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(163, 230, 53, 0.1)',
+                          color: p.mortalite > 0 ? '#f87171' : '#a3e635',
+                          fontWeight: 800
                         }} />
                       </TableCell>
                       <TableCell align="center"><Typography sx={{ fontWeight: 700, color: 'text.primary' }}>{p.consommationAliment} kg</Typography></TableCell>

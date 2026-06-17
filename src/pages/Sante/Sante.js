@@ -8,9 +8,9 @@ import { Add, Edit, Delete, Refresh, Visibility, MedicalServices, Warning } from
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { getLots, getBatiments, getSanteRecords, addSanteRecord, updateSanteRecord, deleteSanteRecord } from '../../services/firestore';
 
-// ── Small chicken for decoration ─────────────────────────────────────────────
 function ChickenSmall({ size = 20, color = '#a3e635' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -24,7 +24,6 @@ function ChickenSmall({ size = 20, color = '#a3e635' }) {
   );
 }
 
-// ── Stat card component ──────────────────────────────────────────────────────
 function StatCard({ value, label, icon, active }) {
   const theme = useTheme();
   return (
@@ -60,6 +59,9 @@ export default function Sante() {
   const { t } = useTranslation();
   const theme = useTheme();
   const { settings } = useSettings();
+ const { userRole } = useAuth();
+ const isVeterinaire = userRole === 'veterinaire';
+
   const [lots, setLots] = useState([]);
   const [batiments, setBatiments] = useState([]);
   const [selectedLot, setSelectedLot] = useState('');
@@ -132,7 +134,7 @@ export default function Sante() {
   const handleSave = async () => {
     setError('');
     setSuccess('');
-    
+
     if (!formData.diagnostic) {
       setError(t('Diagnosis required'));
       return;
@@ -143,7 +145,7 @@ export default function Sante() {
         ...formData,
         symptomes: formData.symptomes ? formData.symptomes.split(',').map(s => s.trim()) : []
       };
-      
+
       if (editing) {
         await updateSanteRecord(selectedLot, editing.id, dataToSave);
         setSuccess(t('Record updated'));
@@ -151,7 +153,7 @@ export default function Sante() {
         await addSanteRecord(selectedLot, dataToSave);
         setSuccess(t('Record added'));
       }
-      
+
       setOpen(false);
       setEditing(null);
       setFormData({
@@ -170,6 +172,7 @@ export default function Sante() {
   };
 
   const handleDelete = async (record) => {
+    if (isVeterinaire) return;
     if (window.confirm(t('Delete record confirmation'))) {
       try {
         await deleteSanteRecord(selectedLot, record.id);
@@ -232,25 +235,19 @@ export default function Sante() {
       </Box>
 
       {success && (
-        <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>
-          {success}
-        </Alert>
+        <Alert severity="success" sx={{ mb: 3, borderRadius: '16px' }}>{success}</Alert>
       )}
       {error && (
-        <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>
-          {error}
-        </Alert>
+        <Alert severity="error" sx={{ mb: 3, borderRadius: '16px' }}>{error}</Alert>
       )}
 
-      {/* ── Selection du lot ── */}
+      {/* ── Sélection du lot ── */}
       <Paper className="glass-card" sx={{ p: 3, mb: 4, borderRadius: '24px' }}>
         <Typography variant="caption" sx={{ fontWeight: 800, color: 'text.secondary', textTransform: 'uppercase', mb: 2, display: 'block', letterSpacing: '0.1em' }}>
           {t('Select Batch')}
         </Typography>
-        
         <TextField
-          select
-          fullWidth
+          select fullWidth
           label={t('Active Batch')}
           value={selectedLot}
           onChange={(e) => setSelectedLot(e.target.value)}
@@ -279,23 +276,13 @@ export default function Sante() {
 
       {selectedLot && selectedLotDetails && (
         <>
-          {/* ── Cartes de statistiques ── */}
+          {/* ── Stat cards ── */}
           <Grid container spacing={3} sx={{ mb: 4 }}>
             <Grid item xs={12} md={4}>
-              <StatCard 
-                value={totalRecords} 
-                label={t('Total Records')} 
-                icon="📋" 
-                active={true}
-              />
+              <StatCard value={totalRecords} label={t('Total Records')} icon="📋" active={true} />
             </Grid>
             <Grid item xs={12} md={4}>
-              <StatCard 
-                value={recordsCritiques} 
-                label={t('Critical Cases')} 
-                icon="⚠️" 
-                active={false}
-              />
+              <StatCard value={recordsCritiques} label={t('Critical Cases')} icon="⚠️" active={false} />
             </Grid>
             <Grid item xs={12} md={4}>
               <Paper className="glass-card" sx={{ p: 2.5, height: '100%', borderRadius: '20px', bgcolor: 'rgba(163, 230, 53, 0.03)' }}>
@@ -326,7 +313,7 @@ export default function Sante() {
             </Grid>
           </Grid>
 
-          {/* ── Bouton Ajouter ── */}
+          {/* ── Bouton Ajouter — visible pour tous ── */}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 3 }}>
             <Button
               variant="contained"
@@ -338,7 +325,7 @@ export default function Sante() {
             </Button>
           </Box>
 
-          {/* ── Tableau des enregistrements sanitaires ── */}
+          {/* ── Tableau ── */}
           <TableContainer component={Paper} className="glass-card" sx={{ borderRadius: '24px', overflow: 'hidden' }}>
             <Table stickyHeader>
               <TableHead>
@@ -360,11 +347,11 @@ export default function Sante() {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    santeRecords.map((record, idx) => {
+                    santeRecords.map((record) => {
                       const severityColor = getSeverityColor(record.diagnostic || '');
                       return (
-                        <TableRow 
-                          key={record.id} 
+                        <TableRow
+                          key={record.id}
                           component={motion.tr}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
@@ -378,8 +365,8 @@ export default function Sante() {
                           </TableCell>
                           <TableCell>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Chip 
-                                label={record.diagnostic?.substring(0, 30) + (record.diagnostic?.length > 30 ? '...' : '')} 
+                              <Chip
+                                label={record.diagnostic?.substring(0, 30) + (record.diagnostic?.length > 30 ? '...' : '')}
                                 color={severityColor}
                                 size="small"
                                 sx={{ fontWeight: 800, fontSize: '0.65rem' }}
@@ -399,46 +386,51 @@ export default function Sante() {
                           </TableCell>
                           <TableCell align={settings.language === 'ar' ? 'left' : 'right'}>
                             <Box sx={{ display: 'flex', gap: 0.5, justifyContent: settings.language === 'ar' ? 'flex-start' : 'flex-end' }}>
+                              
+                              {/* Voir — toujours visible */}
                               <Tooltip title={t('Intervention Detail')}>
                                 <IconButton
                                   size="small"
-                                  onClick={() => {
-                                    setSelectedRecord(record);
-                                    setViewOpen(true);
-                                  }}
+                                  onClick={() => { setSelectedRecord(record); setViewOpen(true); }}
                                   sx={{ color: '#3b82f6' }}
                                 >
                                   <Visibility fontSize="small" />
                                 </IconButton>
                               </Tooltip>
-                              
-                              <Tooltip title={t('Edit')}>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => { 
-                                    setEditing(record); 
-                                    setFormData({
-                                      ...record,
-                                      symptomes: record.symptomes?.join(', ') || '',
-                                      date: record.date?.toDate?.().toISOString().split('T')[0] || record.date || new Date().toISOString().split('T')[0]
-                                    }); 
-                                    setOpen(true);
-                                  }}
-                                  sx={{ color: theme.palette.primary.main }}
-                                >
-                                  <Edit fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
-                              
-                              <Tooltip title={t('Delete')}>
-                                <IconButton
-                                  size="small"
-                                  onClick={() => handleDelete(record)}
-                                  sx={{ color: '#ef4444' }}
-                                >
-                                  <Delete fontSize="small" />
-                                </IconButton>
-                              </Tooltip>
+
+                              {/* Edit — masqué pour vétérinaire */}
+                              {!isVeterinaire && (
+                                <Tooltip title={t('Edit')}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => {
+                                      setEditing(record);
+                                      setFormData({
+                                        ...record,
+                                        symptomes: record.symptomes?.join(', ') || '',
+                                        date: record.date?.toDate?.().toISOString().split('T')[0] || record.date || new Date().toISOString().split('T')[0]
+                                      });
+                                      setOpen(true);
+                                    }}
+                                    sx={{ color: theme.palette.primary.main }}
+                                  >
+                                    <Edit fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+
+                              {/* Delete — masqué pour vétérinaire */}
+                              {!isVeterinaire && (
+                                <Tooltip title={t('Delete')}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => handleDelete(record)}
+                                    sx={{ color: '#ef4444' }}
+                                  >
+                                    <Delete fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
                             </Box>
                           </TableCell>
                         </TableRow>
@@ -473,88 +465,52 @@ export default function Sante() {
         </Paper>
       )}
 
-      {/* ── Dialogue d'ajout/modification ── */}
-      <Dialog 
-        open={open} 
-        onClose={() => setOpen(false)} 
-        maxWidth="sm" 
+      {/* ── Dialogue ajout/modification ── */}
+      <Dialog
+        open={open}
+        onClose={() => { setOpen(false); setEditing(null); }}
+        maxWidth="sm"
         fullWidth
-        PaperProps={{
-          className: 'glass-card',
-          sx: { borderRadius: '24px', p: 1 }
-        }}
+        PaperProps={{ className: 'glass-card', sx: { borderRadius: '24px', p: 1 } }}
       >
         <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
           {editing ? t('Edit') + ' ' + t('Health Tracking') : t('New Health Record')}
         </DialogTitle>
-        
         <DialogContent>
-          <TextField
-            fullWidth 
-            label={t('Diagnosis')} 
-            margin="normal" 
-            multiline 
-            rows={2}
-            value={formData.diagnostic} 
+          <TextField fullWidth label={t('Diagnosis')} margin="normal" multiline rows={2}
+            value={formData.diagnostic}
             onChange={(e) => setFormData({ ...formData, diagnostic: e.target.value })}
-            required
-            placeholder={t('Diagnosis placeholder')}
+            required placeholder={t('Diagnosis placeholder')}
           />
-          
-          <TextField
-            fullWidth 
-            label={t('Treatment')} 
-            margin="normal" 
-            multiline 
-            rows={2}
-            value={formData.traitement} 
+          <TextField fullWidth label={t('Treatment')} margin="normal" multiline rows={2}
+            value={formData.traitement}
             onChange={(e) => setFormData({ ...formData, traitement: e.target.value })}
             placeholder={t('Treatment placeholder')}
           />
-          
-          <TextField
-            fullWidth 
-            label={t('Medicines')} 
-            margin="normal"
-            value={formData.medicaments} 
+          <TextField fullWidth label={t('Medicines')} margin="normal"
+            value={formData.medicaments}
             onChange={(e) => setFormData({ ...formData, medicaments: e.target.value })}
             placeholder={t('Medicines placeholder')}
           />
-          
-          <TextField
-            fullWidth 
-            label={t('Symptoms')} 
-            margin="normal"
-            value={formData.symptomes} 
+          <TextField fullWidth label={t('Symptoms')} margin="normal"
+            value={formData.symptomes}
             onChange={(e) => setFormData({ ...formData, symptomes: e.target.value })}
             placeholder={t('Symptoms placeholder')}
             helperText={t('Symptoms helper')}
           />
-          
-          <TextField
-            fullWidth 
-            label={t('Recommendations')} 
-            margin="normal" 
-            multiline 
-            rows={2}
-            value={formData.recommandations} 
+          <TextField fullWidth label={t('Recommendations')} margin="normal" multiline rows={2}
+            value={formData.recommandations}
             onChange={(e) => setFormData({ ...formData, recommandations: e.target.value })}
             placeholder={t('Recommendations placeholder')}
           />
-          
-          <TextField
-            fullWidth 
-            label={t('Date')} 
-            type="date" 
-            margin="normal"
-            value={formData.date} 
+          <TextField fullWidth label={t('Date')} type="date" margin="normal"
+            value={formData.date}
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             InputLabelProps={{ shrink: true }}
           />
         </DialogContent>
-        
         <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
-          <Button onClick={() => setOpen(false)} sx={{ color: 'text.secondary' }}>
+          <Button onClick={() => { setOpen(false); setEditing(null); }} sx={{ color: 'text.secondary' }}>
             {t('Cancel')}
           </Button>
           <Button variant="contained" onClick={handleSave}>
@@ -563,21 +519,17 @@ export default function Sante() {
         </DialogActions>
       </Dialog>
 
-      {/* ── Dialogue de visualisation ── */}
-      <Dialog 
-        open={viewOpen} 
-        onClose={() => setViewOpen(false)} 
-        maxWidth="sm" 
+      {/* ── Dialogue visualisation ── */}
+      <Dialog
+        open={viewOpen}
+        onClose={() => setViewOpen(false)}
+        maxWidth="sm"
         fullWidth
-        PaperProps={{
-          className: 'glass-card',
-          sx: { borderRadius: '24px', p: 1 }
-        }}
+        PaperProps={{ className: 'glass-card', sx: { borderRadius: '24px', p: 1 } }}
       >
         <DialogTitle sx={{ fontWeight: 800, color: 'text.primary' }}>
           {t('Health Record Detail')}
         </DialogTitle>
-        
         <DialogContent>
           {selectedRecord && (
             <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -585,36 +537,34 @@ export default function Sante() {
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
                   {t('Date')}
                 </Typography>
-                <Typography sx={{ fontWeight: 700 }}>{selectedRecord.date?.toDate?.().toLocaleDateString() || selectedRecord.date}</Typography>
+                <Typography sx={{ fontWeight: 700 }}>
+                  {selectedRecord.date?.toDate?.().toLocaleDateString() || selectedRecord.date}
+                </Typography>
               </Box>
-              
               <Box>
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
                   {t('Diagnosis')}
                 </Typography>
-                <Chip 
-                  label={getSeverityText(selectedRecord.diagnostic || '')} 
+                <Chip
+                  label={getSeverityText(selectedRecord.diagnostic || '')}
                   color={getSeverityColor(selectedRecord.diagnostic || '')}
                   size="small"
                   sx={{ mb: 1, fontWeight: 800 }}
                 />
                 <Typography sx={{ color: 'text.primary' }}>{selectedRecord.diagnostic}</Typography>
               </Box>
-              
               <Box>
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
                   {t('Treatment')}
                 </Typography>
                 <Typography sx={{ color: 'text.primary' }}>{selectedRecord.traitement || '-'}</Typography>
               </Box>
-              
               <Box>
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
                   {t('Medicines')}
                 </Typography>
                 <Typography sx={{ color: 'text.primary', fontWeight: 700 }}>{selectedRecord.medicaments || '-'}</Typography>
               </Box>
-              
               <Box>
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
                   {t('Symptoms')}
@@ -629,7 +579,6 @@ export default function Sante() {
                   )}
                 </Box>
               </Box>
-              
               {selectedRecord.recommandations && (
                 <Box sx={{ p: 2, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
                   <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 800, textTransform: 'uppercase', mb: 0.5, display: 'block' }}>
@@ -641,7 +590,6 @@ export default function Sante() {
             </Box>
           )}
         </DialogContent>
-        
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button variant="contained" onClick={() => setViewOpen(false)} fullWidth sx={{ borderRadius: '12px' }}>
             {t('Close')}
