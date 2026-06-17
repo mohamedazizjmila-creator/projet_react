@@ -151,10 +151,10 @@ export default function Dashboard() {
   const theme = useTheme();
   const { settings } = useSettings();
   const [stats, setStats] = useState({
-    lotsActifs: 12,
-    volailles: 8450,
-    tauxSurvie: 98,
-    consommation: 1240,
+    lotsActifs: 0,
+    volailles: 0,
+    tauxSurvie: 0,
+    consommation: 0,
     temperature: 24.5,
     humidite: 55,
     nh3: 12,
@@ -189,8 +189,35 @@ export default function Dashboard() {
     try {
       const lots = await getLots();
       const actifs = lots.filter(l => l.statut === 'actif');
-      setStats(prev => ({ ...prev, lotsActifs: actifs.length || 12 }));
-    } catch (_) {}
+      
+      // Calcul du nombre total de volailles actives
+      const totalVolailles = actifs.reduce((sum, lot) => sum + (Number(lot.nbInitial) || 0), 0);
+      
+      // Calcul du taux de survie moyen (simulé pour l'exemple)
+      // Idéalement, vous devriez calculer cela à partir des données réelles
+      const tauxSurvieMoyen = actifs.length > 0 ? 98 : 0;
+      
+      // Calcul de la consommation totale (simulée)
+      const consommationTotale = actifs.length > 0 ? 1240 : 0;
+      
+      setStats(prev => ({ 
+        ...prev, 
+        lotsActifs: actifs.length || 0,
+        volailles: totalVolailles || 0,
+        tauxSurvie: tauxSurvieMoyen,
+        consommation: consommationTotale
+      }));
+    } catch (error) {
+      console.error('Erreur lors du chargement du dashboard:', error);
+      // En cas d'erreur, garder les valeurs par défaut
+      setStats(prev => ({
+        ...prev,
+        lotsActifs: 0,
+        volailles: 0,
+        tauxSurvie: 0,
+        consommation: 0
+      }));
+    }
   };
 
   const handleInitDB = async () => {
